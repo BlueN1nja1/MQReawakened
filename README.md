@@ -5,7 +5,7 @@
         <br>
     </h1>
     <h3>A community-driven server emulator, written completely from scratch in C#, for MQ!</h3>
-    <h4>WARNING: THIS REPO IS STRICTLY FOR EXPERIMENTAL PURPOSES! IF YOU ARE INTERESTED IN THE PROJECT, YOURE BETTER OFF LOOKING AT THE MAIN REPO FOR NOW...</h4>
+    <h4>WARNING: THIS REPO IS STRICTLY FOR EXPERIMENTAL PURPOSES! IF YOU ARE INTERESTED IN THE PROJECT, YOU'RE BETTER OFF LOOKING AT THE MAIN REPO FOR NOW...</h4>
     <p>
         <a href="https://github.com/FeroxFoxxo/MQReawakened/blob/master/LICENSE.md">
             <img alt="License" src="https://img.shields.io/github/license/feroxfoxxo/mqreawakened?label=License&style=for-the-badge">
