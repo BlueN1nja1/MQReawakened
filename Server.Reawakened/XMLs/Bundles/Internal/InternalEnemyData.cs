@@ -125,7 +125,7 @@ public class InternalEnemyData : InternalXml
                                                     }
 
                                                 var patrolProperties = new PatrolProperties(patrolSpeed, patrolSmoothMove, patrolEndPathWaitTime, 0, 0, 0, 0);
-                                                state = new PatrolState(patrolProperties, resources, stateType);
+                                                state = new PatrolState(patrolProperties, resources);
                                                 break;
                                             case StateType.Aggro:
                                                 var aggroSpeed = 0f;
@@ -167,7 +167,7 @@ public class InternalEnemyData : InternalXml
                                                     aggroUseAttackBeyondPatrolLine, aggroDetectionRangeUpY, aggroDetectionRangeDownY
                                                 );
 
-                                                state = new AggroState(aggroProperties, resources, stateType);
+                                                state = new AggroState(aggroProperties, resources);
                                                 break;
                                             case StateType.LookAround:
                                                 var lookAroundTime = 0f;
@@ -200,7 +200,7 @@ public class InternalEnemyData : InternalXml
                                                     lookAroundTime, lookAroundStartDirection, lookAroundForceDirection, lookAroundInitialProgressRatio, lookAroundSnapOnGround
                                                 );
 
-                                                state = new LookAroundState(lookAroundProperties, resources, stateType);
+                                                state = new LookAroundState(lookAroundProperties, resources);
                                                 break;
                                             case StateType.ComeBack:
                                                 var comeBackSpeed = 1f;
@@ -214,7 +214,7 @@ public class InternalEnemyData : InternalXml
                                                     }
 
                                                 var comeBackProperties = new ComeBackProperties(comeBackSpeed);
-                                                state = new ComeBackState(comeBackProperties, resources, stateType);
+                                                state = new ComeBackState(comeBackProperties, resources);
                                                 break;
                                             case StateType.Shooting:
                                                 var shootingNbBulletsPerRound = 1;
@@ -273,7 +273,7 @@ public class InternalEnemyData : InternalXml
                                                     shootingProjectileSpeed, shootingFireSpreadClockwise, shootingFireSpreadStartAngle
                                                 );
 
-                                                state = new ShootingState(shootingProperties, resources, stateType);
+                                                state = new ShootingState(shootingProperties, resources);
                                                 break;
                                             case StateType.Bomber:
                                                 var bomberInTime = 0f;
@@ -295,7 +295,7 @@ public class InternalEnemyData : InternalXml
                                                     }
 
                                                 var bomberProperties = new BomberProperties(bomberInTime, bomberLoopTime, bomberBombRadius);
-                                                state = new BomberState(bomberProperties, resources, stateType);
+                                                state = new BomberState(bomberProperties, resources);
                                                 break;
                                             case StateType.Grenadier:
                                                 var grenadierInTime = 0f;
@@ -337,7 +337,7 @@ public class InternalEnemyData : InternalXml
                                                     grenadierProjCount, grenadierProjSpeed, grenadierMaxHeight
                                                 );
 
-                                                state = new GrenadierState(grenadierProperties, resources, stateType);
+                                                state = new GrenadierState(grenadierProperties, resources);
                                                 break;
                                             case StateType.Stomper:
                                                 var stomperAttackTime = 0f;
@@ -363,7 +363,7 @@ public class InternalEnemyData : InternalXml
                                                     }
 
                                                 var stomperProperties = new StomperProperties(stomperAttackTime, stomperImpactTime, stomperDamageDistance, stomperDamageOffset);
-                                                state = new StomperState(stomperProperties, resources, stateType);
+                                                state = new StomperState(stomperProperties, resources);
                                                 break;
                                             case StateType.Stinger:
                                                 var stingerSpeedForward = 0f;
@@ -405,7 +405,7 @@ public class InternalEnemyData : InternalXml
                                                     stingerDamageAttackTimeOffset, stingerInDurationBackward, stingerDamageDistance
                                                 );
 
-                                                state = new StingerState(stingerProperties, resources, stateType);
+                                                state = new StingerState(stingerProperties, resources);
                                                 break;
                                             case StateType.Spike:
                                                 var spikeSpeedForward = 0f;
@@ -464,7 +464,7 @@ public class InternalEnemyData : InternalXml
                                                     spikeTargettedProjectileCount, spikeRandomProjectileCount, spikeProjectileSpeed
                                                 );
 
-                                                state = new SpikeState(spikeProperties, resources, stateType);
+                                                state = new SpikeState(spikeProperties, resources);
                                                 break;
                                             case StateType.Projectile:
                                                 var projectilePrefabName = string.Empty;
@@ -510,10 +510,10 @@ public class InternalEnemyData : InternalXml
                                                     projectileGravity, projectileIsTracking
                                                 );
 
-                                                state = new ProjectileState(projectileProperties, resources, stateType);
+                                                state = new ProjectileState(projectileProperties, resources);
                                                 break;
                                             case StateType.GoTo:
-                                                state = new GoToState(resources, stateType);
+                                                state = new GoToState(resources);
                                                 break;
                                             case StateType.Acting:
                                                 var actingSnapOnGround = false;
@@ -528,7 +528,7 @@ public class InternalEnemyData : InternalXml
 
                                                 var actingProperties = new ActingProperties(actingSnapOnGround);
 
-                                                state = new ActingState(actingProperties, resources, stateType);
+                                                state = new ActingState(actingProperties, resources);
                                                 break;
                                             default:
                                                 Logger.LogError("Unimplemented state for: {State} ({EnemyName})", stateType, prefabName);
@@ -539,164 +539,6 @@ public class InternalEnemyData : InternalXml
                                     }
 
                                     enemyModel.BehaviorData = behaviors;
-                                    break;
-                                case "GenericScript":
-                                    var attackBehavior = StateType.Unknown;
-                                    var awareBehavior = StateType.Unknown;
-                                    var unawareBehavior = StateType.Unknown;
-                                    var awareBehaviorDuration = 0f;
-                                    var healthRegenAmount = 0;
-                                    var healthRegenFrequency = 0;
-
-                                    foreach (XmlNode globalProperty in data.ChildNodes)
-                                    {
-                                        var gDataName = globalProperty.Name;
-                                        var gDataValue = string.Empty;
-
-                                        foreach (XmlAttribute globalPropValue in globalProperty.Attributes)
-                                            switch (globalPropValue.Name)
-                                            {
-                                                case "value":
-                                                    gDataValue = globalPropValue.Value;
-                                                    break;
-                                                default:
-                                                    Logger.LogWarning("Unknown global parameter: '{ParameterName}' for '{EnemyName}'", globalPropValue.Name, prefabName);
-                                                    break;
-                                            }
-
-                                        if (string.IsNullOrEmpty(gDataName) || string.IsNullOrEmpty(gDataValue))
-                                            continue;
-
-                                        switch (gDataName)
-                                        {
-                                            case "AttackBehavior":
-                                                attackBehavior = Enum.Parse<StateType>(gDataValue);
-                                                break;
-                                            case "AwareBehavior":
-                                                awareBehavior = Enum.Parse<StateType>(gDataValue);
-                                                break;
-                                            case "UnawareBehavior":
-                                                unawareBehavior = Enum.Parse<StateType>(gDataValue);
-                                                break;
-                                            case "AwareBehaviorDuration":
-                                                awareBehaviorDuration = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "HealthRegenAmount":
-                                                healthRegenAmount = Convert.ToInt32(gDataValue);
-                                                break;
-                                            case "HealthRegenFrequency":
-                                                healthRegenFrequency = Convert.ToInt32(gDataValue);
-                                                break;
-                                            default:
-                                                Logger.LogWarning("Unknown generic property: '{PropertyName}' for '{EnemyName}'", gDataName, prefabName);
-                                                break;
-                                        }
-                                    }
-
-                                    enemyModel.GenericScript = new GenericScriptModel(attackBehavior, awareBehavior, unawareBehavior, awareBehaviorDuration, healthRegenAmount, healthRegenFrequency);
-                                    break;
-                                case "GlobalProperties":
-                                    var detectionLimitedByPatrolLine = true;
-                                    var frontDetectionRangeX = 0f;
-                                    var frontDetectionRangeUpY = 0f;
-                                    var frontDetectionRangeDownY = 0f;
-                                    var backDetectionRangeX = 0f;
-                                    var backDetectionRangeUpY = 0f;
-                                    var backDetectionRangeDownY = 0f;
-                                    var attackBeyondPatrolLine = 0f;
-                                    var shootOffsetX = 0f;
-                                    var shootOffsetY = 0f;
-                                    var shootingProjectilePrefabName = "COL_PRJ_DamageProjectile";
-                                    var viewOffsetY = 0f;
-
-                                    // Values currently not specified in XML file
-                                    var script = string.Empty;
-                                    var disableCollision = false;
-                                    var detectionSourceOnPatrolLine = true;
-
-                                    foreach (XmlNode globalProperty in data.ChildNodes)
-                                    {
-                                        var gDataName = globalProperty.Name;
-                                        var gDataValue = string.Empty;
-
-                                        foreach (XmlAttribute globalPropValue in globalProperty.Attributes)
-                                            switch (globalPropValue.Name)
-                                            {
-                                                case "value":
-                                                    gDataValue = globalPropValue.Value;
-                                                    break;
-                                                default:
-                                                    Logger.LogWarning("Unknown global parameter: '{ParameterName}' for '{EnemyName}'", globalPropValue.Name, prefabName);
-                                                    break;
-                                            }
-
-                                        if (string.IsNullOrEmpty(gDataName) || string.IsNullOrEmpty(gDataValue))
-                                            continue;
-
-                                        switch (gDataName)
-                                        {
-                                            case "DetectionLimitedByPatrolLine":
-                                                detectionLimitedByPatrolLine = Convert.ToBoolean(gDataValue);
-                                                break;
-                                            case "FrontDetectionRangeX":
-                                                frontDetectionRangeX = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "FrontDetectionRangeUpY":
-                                                frontDetectionRangeUpY = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "FrontDetectionRangeDownY":
-                                                frontDetectionRangeDownY = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "BackDetectionRangeX":
-                                                backDetectionRangeX = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "BackDetectionRangeUpY":
-                                                backDetectionRangeUpY = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "BackDetectionRangeDownY":
-                                                backDetectionRangeDownY = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "AttackBeyondPatrolLine":
-                                                attackBeyondPatrolLine = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "ShootOffsetX":
-                                                shootOffsetX = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "ShootOffsetY":
-                                                shootOffsetY = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "ProjectilePrefabName":
-                                                shootingProjectilePrefabName = gDataValue;
-                                                break;
-                                            case "ViewOffsetY":
-                                                viewOffsetY = Convert.ToSingle(gDataValue);
-                                                break;
-                                            case "Script":
-                                                script = gDataValue;
-                                                break;
-                                            case "DisableCollision":
-                                                disableCollision = Convert.ToBoolean(gDataValue);
-                                                break;
-                                            case "DetectionSourceOnPatrolLine":
-                                                detectionSourceOnPatrolLine = Convert.ToBoolean(gDataValue);
-                                                break;
-                                            default:
-                                                Logger.LogWarning("Unknown global property: '{PropertyName}' for '{EnemyName}'", gDataName, prefabName);
-                                                break;
-                                        }
-                                    }
-
-                                    enemyModel.GlobalProperties =
-                                        new GlobalPropertyModel(
-                                            detectionLimitedByPatrolLine, backDetectionRangeX,
-                                            viewOffsetY, backDetectionRangeUpY,
-                                            backDetectionRangeDownY, shootOffsetX,
-                                            shootOffsetY, frontDetectionRangeX,
-                                            frontDetectionRangeUpY, frontDetectionRangeDownY,
-                                            script, shootingProjectilePrefabName,
-                                            disableCollision, detectionSourceOnPatrolLine,
-                                            attackBeyondPatrolLine
-                                        );
                                     break;
                                 case "LootTable":
                                     var lootTable = new List<EnemyDropModel>();
@@ -744,31 +586,6 @@ public class InternalEnemyData : InternalXml
                                     }
 
                                     enemyModel.EnemyLootTable = lootTable;
-                                    break;
-                                case "Hitbox":
-                                    var width = 0f;
-                                    var height = 0f;
-                                    var xOffset = 0f;
-                                    var yOffset = 0f;
-
-                                    foreach (XmlAttribute hitboxData in data.Attributes)
-                                        switch (hitboxData.Name)
-                                        {
-                                            case "width":
-                                                width = float.Parse(hitboxData.Value);
-                                                break;
-                                            case "height":
-                                                height = float.Parse(hitboxData.Value);
-                                                break;
-                                            case "offsetX":
-                                                xOffset = float.Parse(hitboxData.Value);
-                                                break;
-                                            case "offsetY":
-                                                yOffset = float.Parse(hitboxData.Value);
-                                                break;
-                                        }
-
-                                    enemyModel.Hitbox = new HitboxModel(width, height, xOffset, yOffset);
                                     break;
                                 default:
                                     Logger.LogError("Unknown enemy data type for: {DataType} ({EnemyName}", data.Name, prefabName);

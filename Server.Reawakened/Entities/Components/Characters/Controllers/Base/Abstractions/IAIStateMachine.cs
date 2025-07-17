@@ -3,8 +3,12 @@
 namespace Server.Reawakened.Entities.Components.Characters.Controllers.Base.Abstractions;
 public interface IAIStateMachine
 {
-    public void SetAIStateEnemy(AIStateEnemy enemy);
+    void AddNextState<AiState>() where AiState : class, IAIState;
+    void AddNextState(Type t);
+    void GoToNextState();
 
-    public void AddNextState<AiState>() where AiState : class, IAIState;
-    public void GoToNextState();
+    void SetAIStateEnemy(AIStateEnemy enemy);
+
+    int GetForceDirectionX();
+    void SetForceDirectionX(int directionX);
 }

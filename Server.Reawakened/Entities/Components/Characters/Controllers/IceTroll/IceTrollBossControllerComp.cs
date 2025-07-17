@@ -1,7 +1,4 @@
-﻿using Server.Base.Core.Abstractions;
-using Server.Base.Timers.Extensions;
-using Server.Base.Timers.Services;
-using Server.Reawakened.Entities.Components.Characters.Controllers.Base.Abstractions;
+﻿using Server.Reawakened.Entities.Components.Characters.Controllers.Base.Abstractions;
 using Server.Reawakened.Entities.Components.Characters.Controllers.IceTroll.States;
 using Server.Reawakened.Entities.Components.GameObjects.InterObjs.Interfaces;
 using Server.Reawakened.Entities.Components.GameObjects.Trigger.Interfaces;
@@ -28,7 +25,8 @@ public class IceTrollBossControllerComp : BaseAIStateMachine<IceTrollBossControl
     * AIStateTrollVacuum
     */
 
-    public TimerThread TimerThread { get; set; }
+    public int CurrentPhase = 0;
+    public bool Broken = false;
 
     public void RecievedTrigger(bool triggered)
     {
@@ -37,20 +35,9 @@ public class IceTrollBossControllerComp : BaseAIStateMachine<IceTrollBossControl
 
         if (triggered)
         {
-            var delay = Room.GetEntityFromId<AIStateTrollEntranceComp>(Id)?.DelayBeforeEntranceDuration;
-
-            if (delay.HasValue)
-                TimerThread.RunDelayed(RunEntrance, this, TimeSpan.FromSeconds(delay.Value));
+            AddNextState<AIStateTrollEntranceComp>();
+            GoToNextState();
         }
-    }
-
-    public static void RunEntrance(ITimerData data)
-    {
-        if (data is not IceTrollBossControllerComp troll)
-            return;
-
-        troll.AddNextState<AIStateTrollEntranceComp>();
-        troll.GoToNextState();
     }
 
     public void Destroy(Room room, string id)

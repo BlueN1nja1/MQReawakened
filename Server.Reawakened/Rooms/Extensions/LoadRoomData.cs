@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Server.Base.Logging;
+using Server.Reawakened.BundleHost.Configs;
 using Server.Reawakened.Core.Configs;
 using Server.Reawakened.Entities.Colliders;
 using Server.Reawakened.Entities.Colliders.Abstractions;
@@ -8,6 +9,8 @@ using Server.Reawakened.Network.Helpers;
 using Server.Reawakened.Rooms.Models.Entities;
 using Server.Reawakened.Rooms.Models.Planes;
 using Server.Reawakened.Rooms.Services;
+using System.Collections;
+using System.Collections.Specialized;
 using System.Reflection;
 using System.Text.Json;
 using System.Xml;
@@ -18,7 +21,7 @@ namespace Server.Reawakened.Rooms.Extensions;
 
 public static class LoadRoomData
 {
-    private static readonly JsonSerializerOptions _jsonSerializerOptions = new() { WriteIndented = true };
+    public static readonly JsonSerializerOptions _jsonSerializerOptions = new() { WriteIndented = true };
 
     public static Dictionary<string, BaseCollider> LoadTerrainColliders(this Room room)
     {
@@ -96,6 +99,7 @@ public static class LoadRoomData
         var reflectionUtils = services.GetRequiredService<ReflectionUtils>();
         var fileLogger = services.GetRequiredService<FileLogger>();
         var classCopier = services.GetRequiredService<ClassCopier>();
+        var assetBundleRConfig = services.GetRequiredService<AssetBundleRConfig>();
 
         var entities = new Dictionary<string, List<BaseComponent>>();
         room.UnknownEntities = [];
@@ -103,7 +107,7 @@ public static class LoadRoomData
         if (room.Planes == null)
             return entities;
 
-        var entityTransfer = new EntityTransfer(reflectionUtils, classCopier, room, fileLogger, services);
+        var entityTransfer = new EntityTransfer(reflectionUtils, classCopier, room, fileLogger, services, assetBundleRConfig);
 
         foreach (var plane in room.Planes)
         {
@@ -165,21 +169,31 @@ public static class LoadRoomData
     }
 
     private class EntityTransfer(ReflectionUtils reflectionUtils, ClassCopier classCopier,
-        Room room, FileLogger fileLogger, IServiceProvider serviceProvider)
+        Room room, FileLogger fileLogger, IServiceProvider serviceProvider, AssetBundleRConfig assetBundleRConfig)
     {
         public ReflectionUtils ReflectionUtils => reflectionUtils;
         public ClassCopier ClassCopier => classCopier;
         public Room Room => room;
         public FileLogger FileLogger => fileLogger;
         public IServiceProvider ServiceProvider => serviceProvider;
+        public AssetBundleRConfig AssetBundleRConfig => assetBundleRConfig;
     }
 
     private static List<BaseComponent> GetEntity(GameObjectModel entity, EntityTransfer vars, out List<string> unknownComponents)
     {
         var componentList = new List<BaseComponent>();
         var entityData = new Entity(entity, vars.Room, vars.FileLogger);
+        var prefabOverrides = vars.Room.World.GetPrefabOverloads(vars.AssetBundleRConfig, entity.ObjectInfo.PrefabName);
 
         unknownComponents = [];
+
+        if (prefabOverrides != null)
+            foreach (var entry in prefabOverrides)
+                if (!entity.ObjectInfo.Components.ContainsKey(entry.Key))
+                    entity.ObjectInfo.Components.Add(entry.Key, new ComponentModel
+                    {
+                        ComponentAttributes = []
+                    });
 
         foreach (var component in entity.ObjectInfo.Components)
         {
@@ -197,53 +211,13 @@ public static class LoadRoomData
             var dataObj = newEntity.Key;
             var fields = newEntity.Value;
 
-            foreach (var componentValue in component.Value.ComponentAttributes.Where(componentValue =>
-                         !string.IsNullOrEmpty(componentValue.Value)))
-            {
-                var field = fields.FirstOrDefault(f => f.Name == componentValue.Key);
+            if (prefabOverrides != null)
+                if (prefabOverrides.TryGetValue(mqType.Name, out var value))
+                    ApplyPrefabOverrides(value, dataObj, vars.Room.Logger);
 
-                if (field == null)
-                    continue;
+            var componentAttributes = component.Value.ComponentAttributes;
 
-                if (field.FieldType == typeof(string))
-                    field.SetValue(dataObj, componentValue.Value);
-                else if (field.FieldType == typeof(int))
-                    field.SetValue(dataObj, int.Parse(componentValue.Value));
-                else if (field.FieldType == typeof(bool))
-                    field.SetValue(dataObj, componentValue.Value.Equals("true", StringComparison.CurrentCultureIgnoreCase));
-                else if (field.FieldType == typeof(float))
-                    field.SetValue(dataObj, float.Parse(componentValue.Value));
-                else if (field.FieldType.IsEnum)
-                    field.SetValue(dataObj, Enum.Parse(field.FieldType, componentValue.Value));
-                else if (field.FieldType == typeof(Vector3))
-                {
-                    var translateComponent = componentValue.Value.Replace("(", string.Empty).Replace(")", string.Empty);
-                    var translatedArray = translateComponent.Split(",");
-                    field.SetValue(dataObj, new Vector3(float.Parse(translatedArray[0]), float.Parse(translatedArray[1]), float.Parse(translatedArray[2])));
-                }
-                else if (field.FieldType == typeof(Vector2))
-                {
-                    var translateComponent = componentValue.Value.Replace("(", string.Empty).Replace(")", string.Empty);
-                    var translatedArray = translateComponent.Split(",");
-                    field.SetValue(dataObj, new Vector2(float.Parse(translatedArray[0]), float.Parse(translatedArray[1])));
-                }
-                else if (field.FieldType == typeof(Color))
-                {
-                    var translateComponent = componentValue.Value.Replace("RGBA(", string.Empty).Replace(")", string.Empty);
-                    var translatedArray = translateComponent.Split(",");
-                    field.SetValue(dataObj, new Color(float.Parse(translatedArray[0]), float.Parse(translatedArray[1]), float.Parse(translatedArray[2]), float.Parse(translatedArray[3])));
-                }
-                else if (field.FieldType == typeof(string[]))
-                {
-                    var translatedArray = componentValue.Value.Split(",");
-                    field.SetValue(dataObj, translatedArray);
-                }
-                else
-                {
-                    vars.Room.Logger.LogError("It is unknown how to convert a string to a {FieldType} (data: {Data}).",
-                        field.FieldType, componentValue.Value);
-                }
-            }
+            ApplyXMLOverrides(componentAttributes, dataObj, fields, vars.Room.Logger);
 
             var instancedComponent = vars.ReflectionUtils.CreateBuilder<BaseComponent>(internalType.GetTypeInfo())
                 .Invoke(vars.ServiceProvider);
@@ -270,6 +244,244 @@ public static class LoadRoomData
         }
 
         return componentList;
+    }
+
+    private static void ApplyPrefabOverrides(OrderedDictionary prefabOverrides, object dataObj, Microsoft.Extensions.Logging.ILogger logger)
+    {
+        var fields = dataObj.GetType().GetFields();
+
+        if (prefabOverrides.Count > 0)
+        {
+            foreach (var entry in prefabOverrides.Cast<DictionaryEntry>())
+            {
+                if (entry.Value == null)
+                    continue;
+
+                if (entry.Key is not string key)
+                {
+                    logger.LogError("Prefab override key is not a string: {Key} ({Type})", entry.Key, entry.Key.GetType());
+                    continue;
+                }
+
+                var field = fields.FirstOrDefault(f => f.Name == key);
+
+                if (field == null)
+                {
+                    logger.LogError("Prefab value: {Value} could not be found for component {Component}", entry.Key, dataObj.GetType().Name);
+                    continue;
+                }
+
+                if (entry.Value is JsonElement element)
+                {
+                    switch (element.ValueKind)
+                    {
+                        case JsonValueKind.String:
+                            switch (field.FieldType)
+                            {
+                                case var t when t == typeof(string):
+                                    field.SetValue(dataObj, element.GetString());
+                                    continue;
+                                default:
+                                    logger.LogError("Fields didnt match {T1} {T2}.", element.ValueKind, field.FieldType);
+                                    continue;
+                            }
+                        case JsonValueKind.Number:
+                            switch (field.FieldType)
+                            {
+                                case var t when t == typeof(int):
+                                    field.SetValue(dataObj, element.GetInt32());
+                                    continue;
+                                case var t when t == typeof(float):
+                                    field.SetValue(dataObj, element.GetSingle());
+                                    continue;
+                                case var t when t == typeof(bool):
+                                    field.SetValue(dataObj, element.GetInt32() == 1);
+                                    continue;
+                                case var t when t.IsEnum:
+                                    field.SetValue(dataObj, Enum.ToObject(t, element.GetInt32()));
+                                    continue;
+                                default:
+                                    logger.LogError("Fields didnt match {T1} {T2}.", element.ValueKind, field.FieldType);
+                                    continue;
+                            }
+                        case JsonValueKind.False:
+                            switch (field.FieldType)
+                            {
+                                case var t when t == typeof(bool):
+                                    field.SetValue(dataObj, false);
+                                    continue;
+                                default:
+                                    logger.LogError("Fields didnt match {T1} {T2}.", element.ValueKind, field.FieldType);
+                                    continue;
+                            }
+                        case JsonValueKind.True:
+                            switch (field.FieldType)
+                            {
+                                case var t when t == typeof(bool):
+                                    field.SetValue(dataObj, true);
+                                    continue;
+                                default:
+                                    logger.LogError("Fields didnt match {T1} {T2}.", element.ValueKind, field.FieldType);
+                                    continue;
+                            }
+                        case JsonValueKind.Null:
+                            continue;
+                        case JsonValueKind.Object:
+                            switch (field.FieldType)
+                            {
+                                case var t when t == typeof(GameObject) || t == typeof(AnimationClip) || t == typeof(Transform) ||
+                                    t == typeof(Mesh) || t == typeof(Texture2D) || t == typeof(Material) || t == typeof(AudioSource) ||
+                                    t == typeof(AudioClip) || t == typeof(BoxCollider):
+                                    continue;
+                                case var t when t == typeof(Vector2):
+                                    var v2Props = element.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.GetSingle());
+                                    field.SetValue(dataObj, new Vector2(v2Props["x"], v2Props["y"]));
+                                    continue;
+                                case var t when t == typeof(Vector3):
+                                    var v3Props = element.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.GetSingle());
+                                    field.SetValue(dataObj, new Vector3(v3Props["x"], v3Props["y"], v3Props["z"]));
+                                    continue;
+                                case var t when t == typeof(Color):
+                                    var colorProps = element.EnumerateObject().ToDictionary(x => x.Name, x => x.Value.GetSingle());
+                                    field.SetValue(dataObj, new Color(colorProps["r"], colorProps["g"], colorProps["b"], colorProps["a"]));
+                                    continue;
+                                case var t when t.IsDefined(typeof(SerializableAttribute)):
+                                    try
+                                    {
+                                        field.SetValue(dataObj, element.Deserialize(t));
+                                    }
+                                    catch
+                                    {
+                                        logger.LogError("Could not deserialized {T}. Content: {S}.", t, element.GetRawText());
+                                    }
+                                    continue;
+                                default:
+                                    logger.LogError("Fields didnt match {T1} {T2}.", element.ValueKind, field.FieldType);
+                                    continue;
+                            }
+                        case JsonValueKind.Array:
+                            switch (field.FieldType)
+                            {
+                                case var t when t == typeof(GameObject[]) || t == typeof(AnimationClip[]) || t == typeof(Transform[]) ||
+                                    t == typeof(Mesh[]) || t == typeof(Texture2D[]) || t == typeof(Material[]) || t == typeof(AudioSource[]) ||
+                                    t == typeof(List<AnimationClip>) || t == typeof(AudioClip[]) || t == typeof(BoxCollider[]):
+                                    continue;
+                                case var t when t == typeof(List<string>):
+                                    field.SetValue(dataObj, element.EnumerateArray().Select(x => x.GetString()).ToList());
+                                    continue;
+                                case var t when t == typeof(string[]):
+                                    field.SetValue(dataObj, element.EnumerateArray().Select(x => x.GetString()).ToArray());
+                                    continue;
+                                case var t when t == typeof(int[]):
+                                    field.SetValue(dataObj, element.EnumerateArray().Select(x => x.GetInt32()).ToArray());
+                                    continue;
+                                case var t when t == typeof(float[]):
+                                    field.SetValue(dataObj, element.EnumerateArray().Select(x => x.GetSingle()).ToArray());
+                                    continue;
+                                case var t when t.IsArray && t.GetElementType().IsEnum:
+                                    var enumType = t.GetElementType();
+
+                                    var jsonArray = element.EnumerateArray().ToArray();
+                                    var typedArray = Array.CreateInstance(enumType, jsonArray.Length);
+
+                                    for (var i = 0; i < jsonArray.Length; i++)
+                                    {
+                                        var enumValue = Enum.ToObject(enumType, jsonArray[i].GetInt32());
+                                        typedArray.SetValue(enumValue, i);
+                                    }
+
+                                    field.SetValue(dataObj, typedArray);
+                                    continue;
+                                case var t when t.IsArray && t.GetElementType().IsDefined(typeof(SerializableAttribute)):
+                                    var serializableType = t.GetElementType();
+
+                                    var serializedArray = element.EnumerateArray().ToArray();
+                                    var typedSerializedArray = Array.CreateInstance(serializableType, serializedArray.Length);
+
+                                    for (var i = 0; i < serializedArray.Length; i++)
+                                    {
+                                        try
+                                        {
+                                            var elementObject = serializedArray[i].Deserialize(serializableType);
+                                            typedSerializedArray.SetValue(elementObject, i);
+                                        }
+                                        catch
+                                        {
+                                            logger.LogError("Could not deserialized {T}. Content: {S}.", serializableType, element.GetRawText());
+                                        }
+                                    }
+
+                                    field.SetValue(dataObj, typedSerializedArray);
+                                    continue;
+                                default:
+                                    logger.LogError("Fields didnt match {T1} {T2}.", element.ValueKind, field.FieldType);
+                                    continue;
+                            }
+                        default:
+                            switch (field.FieldType)
+                            {
+                                default:
+                                    logger.LogError("Fields didnt match {T1} {T2}.", element.ValueKind, field.FieldType);
+                                    continue;
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void ApplyXMLOverrides(Dictionary<string, string> componentAttributes, object dataObj, FieldInfo[] fields, Microsoft.Extensions.Logging.ILogger logger)
+    {
+        foreach (var componentValue in componentAttributes.Where(componentValue =>
+                     !string.IsNullOrEmpty(componentValue.Value)))
+        {
+            var field = fields.FirstOrDefault(f => f.Name == componentValue.Key);
+
+            if (field == null)
+                continue;
+
+            switch (field.FieldType)
+            {
+                case var t when t == typeof(string):
+                    field.SetValue(dataObj, componentValue.Value);
+                    continue;
+                case var t when t == typeof(int):
+                    field.SetValue(dataObj, int.Parse(componentValue.Value));
+                    continue;
+                case var t when t == typeof(bool):
+                    field.SetValue(dataObj, componentValue.Value.Equals("true", StringComparison.CurrentCultureIgnoreCase));
+                    continue;
+                case var t when t == typeof(float):
+                    field.SetValue(dataObj, float.Parse(componentValue.Value));
+                    continue;
+                case var t when t.IsEnum:
+                    field.SetValue(dataObj, Enum.Parse(field.FieldType, componentValue.Value));
+                    continue;
+                case var t when t == typeof(Vector3):
+                    var translateComponent = componentValue.Value.Replace("(", string.Empty).Replace(")", string.Empty);
+                    var translatedArray = translateComponent.Split(",");
+                    field.SetValue(dataObj, new Vector3(float.Parse(translatedArray[0]), float.Parse(translatedArray[1]), float.Parse(translatedArray[2])));
+                    continue;
+                case var t when t == typeof(Vector2):
+                    var translateComponent2 = componentValue.Value.Replace("(", string.Empty).Replace(")", string.Empty);
+                    var translatedArray2 = translateComponent2.Split(",");
+                    field.SetValue(dataObj, new Vector2(float.Parse(translatedArray2[0]), float.Parse(translatedArray2[1])));
+                    continue;
+                case var t when t == typeof(Color):
+                    var translateComponent3 = componentValue.Value.Replace("RGBA(", string.Empty).Replace(")", string.Empty);
+                    var translatedArray3 = translateComponent3.Split(",");
+                    field.SetValue(dataObj, new Color(float.Parse(translatedArray3[0]), float.Parse(translatedArray3[1]), float.Parse(translatedArray3[2]), float.Parse(translatedArray3[3])));
+                    continue;
+                case var t when t == typeof(string[]):
+                    var translatedArray4 = componentValue.Value.Split(",");
+                    field.SetValue(dataObj, translatedArray4);
+                    continue;
+                default:
+                    logger.LogError("It is unknown how to convert a string to a {FieldType} (data: {Data}).",
+                        field.FieldType, componentValue.Value);
+                    continue;
+            }
+        }
     }
 
     public static string GetUnknownComponentTypes(this Room room, string id)

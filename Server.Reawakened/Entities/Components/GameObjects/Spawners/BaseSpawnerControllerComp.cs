@@ -161,12 +161,7 @@ public class BaseSpawnerControllerComp : Component<BaseSpawnerController>
             return;
         }
 
-        var defaultProperties = AISyncEventHelper.CreateDefaultGlobalProperties();
-        var copier = Services.GetRequiredService<ClassCopier>();
-
-        global.MixGlobalProperties(copier, defaultProperties);
-
-        var spawnerData = new SpawnedEnemyData(global, generic, status, enemyController, hazard, defaultProperties);
+        var spawnerData = new SpawnedEnemyData(global, generic, status, enemyController, hazard, global.GetGlobalProperties());
 
         TemplateEnemyModels.TryAdd(templateId, spawnerData);
     }
@@ -258,7 +253,7 @@ public class BaseSpawnerControllerComp : Component<BaseSpawnerController>
 
         var behaviors = new Dictionary<StateType, BaseState>
         {
-            { StateType.Idle, new IdleState([], StateType.Idle) }
+            { StateType.Idle, new IdleState([]) }
         };
 
         Room.SendSyncEvent(

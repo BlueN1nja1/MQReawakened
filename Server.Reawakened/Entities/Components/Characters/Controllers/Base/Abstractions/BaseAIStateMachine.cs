@@ -15,8 +15,23 @@ public abstract class BaseAIStateMachine<T> : Component<T>, IAIStateMachine
     public ILogger<T> Logger { get; set; }
 
     public AIStateEnemy EnemyData;
+    public int ForceDirectionX;
 
-    public void SetAIStateEnemy(AIStateEnemy enemy) => EnemyData = enemy;
+    public void SetAIStateEnemy(AIStateEnemy enemy)
+    {
+        EnemyData = enemy;
+
+        foreach (var state in Room.GetEntitiesFromId<IAIState>(Id))
+            state.SetEnemyController(enemy);
+    }
+
+    public override void InitializeComponent()
+    {
+        foreach (var state in Room.GetEntitiesFromId<IAIState>(Id))
+            state.SetStateMachine(this);
+
+        ForceDirectionX = 0;
+    }
 
     public void AddNextState<AiState>() where AiState : class, IAIState
     {
@@ -35,8 +50,36 @@ public abstract class BaseAIStateMachine<T> : Component<T>, IAIStateMachine
             return;
         }
 
-        state.SetStateMachine(this);
         NextStates.Add(state);
+    }
+
+    public void AddNextState(Type t)
+    {
+        var state = Room.GetEntityFromId(Id, t);
+
+        if (state == null)
+        {
+            var stateName = t.Name;
+            var types = string.Join(", ", Room.GetEntitiesFromId<IAIState>(Id).Select(x => x.StateName));
+
+            Logger.LogError(
+                "Could not find state of {StateName} for {PrefabName}. Possible types: {Types}",
+                stateName, PrefabName, types
+            );
+
+            return;
+        }
+
+        if (state is not IAIState aiState)
+        {
+            Logger.LogError(
+                "Type {Type} for {PrefabName} is not an AI state.",
+                t.Name, PrefabName
+            );
+            return;
+        }
+
+        NextStates.Add(aiState);
     }
 
     public void GoToNextState()
@@ -92,4 +135,7 @@ public abstract class BaseAIStateMachine<T> : Component<T>, IAIStateMachine
     }
 
     public override void NotifyCollision(NotifyCollision_SyncEvent notifyCollisionEvent, Player player) { }
+
+    public int GetForceDirectionX() => ForceDirectionX;
+    public void SetForceDirectionX(int directionX) => ForceDirectionX = directionX;
 }

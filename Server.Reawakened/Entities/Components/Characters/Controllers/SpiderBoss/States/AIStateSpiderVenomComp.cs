@@ -1,14 +1,13 @@
 ﻿using A2m.Server;
+using Microsoft.Extensions.Logging;
 using Server.Base.Core.Abstractions;
 using Server.Base.Timers.Extensions;
 using Server.Base.Timers.Services;
-using Server.Reawakened.Core.Configs;
 using Server.Reawakened.Entities.Components.Characters.Controllers.Base.Abstractions;
-using Server.Reawakened.XMLs.Bundles.Base;
 using UnityEngine;
 
 namespace Server.Reawakened.Entities.Components.Characters.Controllers.SpiderBoss.States;
-public class AIStateSpiderVenomComp : BaseAIState<AIStateSpiderVenom>
+public class AIStateSpiderVenomComp : BaseAIState<AIStateSpiderVenom, AI_State>
 {
     public override string StateName => "AIStateSpiderVenom";
 
@@ -22,16 +21,28 @@ public class AIStateSpiderVenomComp : BaseAIState<AIStateSpiderVenom>
     public float CooldownTime => ComponentData.CooldownTime;
 
     public TimerThread TimerThread { get; set; }
-    public EnemyRConfig EnemyRConfig { get; set; }
-    public ServerRConfig ServerRConfig { get; set; }
-    public ItemCatalog ItemCatalog { get; set; }
-    public ItemRConfig ItemRConfig { get; set; }
 
-    public override void StartState()
+    public override AI_State GetInitialAIState() => new(
+        [
+            new (0f, "Shooting"),
+            new (CooldownTime, "Cooldown")
+        ], loop: false);
+
+    public void Shooting()
     {
-        TimerThread.RunDelayed(LaunchProjectile, new SpiderProjectile() { IsFirstProjectile = true, Component = this }, TimeSpan.FromSeconds(EnemyRConfig.SpiderTeaserBossFirstProjectileDelay));
-        TimerThread.RunDelayed(LaunchProjectile, new SpiderProjectile() { IsFirstProjectile = false, Component = this }, TimeSpan.FromSeconds(EnemyRConfig.SpiderTeaserBossSecondProjectileDelay));
-        TimerThread.RunDelayed(RunDropState, this, TimeSpan.FromSeconds(EnemyRConfig.SpiderTeaserBossDropDelay));
+        Logger.LogTrace("Shooting called for {StateName} on {PrefabName}", StateName, PrefabName);
+
+        var firstShot = TimeDelayBetweenShotPerPhase.FirstOrDefault();
+
+        var firstProjectileTime = TimeSpan.FromSeconds(firstShot);
+
+        if (firstProjectileTime > TimeSpan.Zero)
+            TimerThread.RunDelayed(LaunchProjectile, new SpiderProjectile() { IsFirstProjectile = true, Component = this }, firstProjectileTime);
+
+        var secondProjectileTime = firstProjectileTime.Add(TimeSpan.FromSeconds(firstShot));
+
+        if (secondProjectileTime > TimeSpan.Zero)
+            TimerThread.RunDelayed(LaunchProjectile, new SpiderProjectile() { IsFirstProjectile = false, Component = this }, secondProjectileTime);
     }
 
     public class SpiderProjectile() : ITimerData
@@ -49,18 +60,18 @@ public class AIStateSpiderVenomComp : BaseAIState<AIStateSpiderVenom>
 
         var component = projectile.Component;
 
-        var position = new Vector3(component.Position.X, component.Position.Y + component.EnemyRConfig.SpiderTeaserBossProjectileYOffset, component.Position.Z);
-        var speed = new Vector2(-component.EnemyRConfig.SpiderTeaserBossProjectileSpeed, Convert.ToBoolean(projectile.IsFirstProjectile) ? 0 : component.EnemyRConfig.SpiderTeaserBossProjectileSpeed);
+        var first = projectile.IsFirstProjectile;
 
-        component.Room.AddRangedProjectile(component.Id, position, speed, component.EnemyRConfig.SpiderTeaserBossProjectileLifeTime, 1, ItemEffectType.BluntDamage, false);
+        var speed = new Vector2(first ? component.FirstProjectileSpeedX : component.SecondProjectileSpeedX, component.SecondProjectileSpeedY);
+
+        component.Room.AddRangedProjectile(component.Id, component.Position.ToUnityVector3(), speed, component.CooldownTime, 1, ItemEffectType.BluntDamage, false);
     }
 
-    public static void RunDropState(ITimerData data)
+    public void Cooldown()
     {
-        if (data is not AIStateSpiderVenomComp spider)
-            return;
+        Logger.LogTrace("Cooldown called for {StateName} on {PrefabName}", StateName, PrefabName);
 
-        spider.AddNextState<AIStateSpiderDropComp>();
-        spider.GoToNextState();
+        AddNextState<AIStateSpiderDropComp>();
+        GoToNextState();
     }
 }

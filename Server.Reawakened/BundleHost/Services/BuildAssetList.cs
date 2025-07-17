@@ -115,6 +115,41 @@ public class BuildAssetList(ILogger<BuildAssetList> logger, EventSink sink, Asse
         sRConfig.LoadedAssets = [.. InternalAssets.Keys];
         iconExtract.ExtractAllIcons(InternalAssets);
 
+        if (sRConfig.LastClientUpdate != rwConfig.LastDecompiledScriptUpdate || forceGenerate)
+        {
+            logger.LogInformation("Emptying script directory as lengths don't match.");
+
+            Directory.Delete(rConfig.ScriptsConfigDirectory, true);
+            Directory.CreateDirectory(rConfig.ScriptsConfigDirectory);
+
+            logger.LogInformation("Loading fresh scripts.");
+
+            using var defaultBar = new DefaultProgressBar(gameAssets.Length, rConfig.Message, logger, rwConfig);
+
+            foreach (var asset in gameAssets)
+            {
+                var manager = new AssetsManager();
+                manager.LoadFiles(asset.Path);
+
+                var assetFile = manager.assetsFileList.FirstOrDefault();
+
+                defaultBar.TickBar();
+
+                if (assetFile == null)
+                    continue;
+
+                assetFile.GetScriptsFromBundle(asset.Name, rConfig);
+            }
+
+            logger.LogDebug("Finished loading scripts.");
+
+            rwConfig.LastDecompiledScriptUpdate = sRConfig.LastClientUpdate;
+        }
+        else
+        {
+            logger.LogInformation("Scripts found.");
+        }
+
         assetSink.InvokeAssetBundlesLoaded(new AssetBundleLoadEventArgs(InternalAssets));
     }
 
@@ -266,7 +301,6 @@ public class BuildAssetList(ILogger<BuildAssetList> logger, EventSink sink, Asse
 
         return asset;
     }
-
 
     private void AddPublishConfiguration(IEnumerable<InternalAssetInfo> assets, string key)
     {

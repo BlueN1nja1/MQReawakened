@@ -9,6 +9,8 @@ using Server.Reawakened.Entities.Components.GameObjects.InterObjs.Interfaces;
 using Server.Reawakened.Entities.Components.GameObjects.Spawners;
 using Server.Reawakened.Entities.Components.GameObjects.Trigger;
 using Server.Reawakened.Entities.Components.GameObjects.Trigger.Enums;
+using Server.Reawakened.Entities.Components.PrefabInfos;
+using Server.Reawakened.Entities.Components.PrefabInfos.Abstractions;
 using Server.Reawakened.Entities.Enemies.Extensions;
 using Server.Reawakened.Entities.Enemies.Models;
 using Server.Reawakened.Players;
@@ -57,8 +59,7 @@ public abstract class BaseEnemy : IDestructible
 
     public BaseSpawnerControllerComp LinkedSpawner;
     public InterObjStatusComp Status;
-
-    public GlobalProperties GlobalProperties;
+    public IObjectSizeInfo Box;
 
     public readonly BaseComponent Entity;
     public readonly IEnemyController EnemyController;
@@ -87,6 +88,14 @@ public abstract class BaseEnemy : IDestructible
 
         Status = Room.GetEntityFromId<InterObjStatusComp>(Id);
 
+        var serverObjectSize = Room.GetEntityFromId<ServerObjectSizeInfoComp>(Id);
+        var objectSize = Room.GetEntityFromId<ObjectSizeInfoComp>(Id);
+
+        if (serverObjectSize != null)
+            Box = serverObjectSize;
+        else if (objectSize != null)
+            Box = objectSize;
+
         switch (ParentPlane)
         {
             case "TemplatePlane":
@@ -112,12 +121,9 @@ public abstract class BaseEnemy : IDestructible
 
         Health = MaxHealth;
 
-        GenerateHitbox(EnemyModel.Hitbox);
-
-        GlobalProperties = AISyncEventHelper.CreateDefaultGlobalProperties();
+        GenerateHitbox();
 
         // Temporary values
-
         HealthModifier = 1;
         ScaleModifier = 1;
         ResistanceModifier = 1;
@@ -158,13 +164,22 @@ public abstract class BaseEnemy : IDestructible
         ParentPlane = LinkedSpawner.ParentPlane;
     }
 
-    public void GenerateHitbox(HitboxModel box)
+    public void GenerateHitbox()
     {
-        var width = box.Width * EnemyController.Scale.X * (EnemyController.Scale.X < 0 ? -1 : 1);
-        var height = box.Height * EnemyController.Scale.Y * (EnemyController.Scale.Y < 0 ? -1 : 1);
+        if (Box == null || EnemyController.Scale == null)
+        {
+            Logger.LogError("Box or Scale is null for enemy {PrefabName} with ID {Id}. Cannot generate hitbox.", PrefabName, Id);
+            return;
+        }
 
-        var offsetX = box.XOffset * EnemyController.Scale.X - width / 2 * (EnemyController.Scale.X < 0 ? -1 : 1);
-        var offsetY = box.YOffset * EnemyController.Scale.Y - height / 2 * (EnemyController.Scale.Y < 0 ? -1 : 1);
+        var size = Box.GetSize();
+        var offset = Box.GetOffset();
+
+        var width = size.x * EnemyController.Scale.X * (EnemyController.Scale.X < 0 ? -1 : 1);
+        var height = size.y * EnemyController.Scale.Y * (EnemyController.Scale.Y < 0 ? -1 : 1);
+
+        var offsetX = offset.x * EnemyController.Scale.X - width / 2 * (EnemyController.Scale.X < 0 ? -1 : 1);
+        var offsetY = offset.y * EnemyController.Scale.Y - height / 2 * (EnemyController.Scale.Y < 0 ? -1 : 1);
 
         var position = new Vector3(Position.x, Position.y, Position.z);
 
@@ -175,7 +190,7 @@ public abstract class BaseEnemy : IDestructible
 
     public virtual void Damage(Player player, int damage)
     {
-        if (Room.IsObjectKilled(Id))
+        if (Room.IsObjectKilled(Id) || player == null)
             return;
 
         var resistance = GameFlow.StatisticData.GetValue(ItemEffectType.Defence, WorldStatisticsGroup.Enemy, Level);
@@ -188,16 +203,15 @@ public abstract class BaseEnemy : IDestructible
 
         Room.SendSyncEvent(new AiHealth_SyncEvent(Id.ToString(), Room.Time, Health, damage, resistance, resistedDamage, player == null ? string.Empty : player.CharacterName, false, true));
 
-        if (Health <= 0)
-            KillEnemy(player);
+        NotifyDamaged(player);
     }
 
     public virtual void PetDamage(Player player)
     {
-        if (Room.IsObjectKilled(Id))
+        if (Room.IsObjectKilled(Id) || player == null)
             return;
 
-        if (player == null || !player.Character.Pets.TryGetValue(player.GetEquippedPetId(ServerRConfig), out var pet))
+        if (!player.Character.Pets.TryGetValue(player.GetEquippedPetId(ServerRConfig), out var pet))
         {
             Logger.LogError("Could not find pet that damaged {PrefabName}! Returning...", PrefabName);
             return;
@@ -207,7 +221,16 @@ public abstract class BaseEnemy : IDestructible
 
         Room.SendSyncEvent(new AiHealth_SyncEvent(Id.ToString(), Room.Time, Health -= petDamage, petDamage, 1, 1, player.CharacterName, false, true));
 
-        if (Health <= 0)
+        NotifyDamaged(player);
+    }
+
+    public void NotifyDamaged(Player player)
+    {
+        var isDead = Health <= 0;
+
+        DamagedEnemy(isDead);
+
+        if (isDead)
             KillEnemy(player);
     }
 
@@ -225,6 +248,12 @@ public abstract class BaseEnemy : IDestructible
 
         Destroy(Room, Id);
         Room.KillEntity(Id);
+    }
+
+    public void DamagedEnemy(bool isDead)
+    {
+        foreach (var damageComponent in Room.GetEntitiesFromId<IAIDamageEnemy>(Id))
+            damageComponent.EnemyDamaged(isDead);
     }
 
     public void DespawnEnemy()
@@ -290,4 +319,12 @@ public abstract class BaseEnemy : IDestructible
 
         Room.SendSyncEvent(new AiHealth_SyncEvent(Id.ToString(), Room.Time, Health, healPoints, 0, 0, string.Empty, false, true));
     }
+
+    public void FireProjectile(Vector3 position, Vector2 speed, bool isGrenade) =>
+        Room.AddRangedProjectile(Id, position, speed, 3, GetDamage(), EnemyController.EnemyEffectType, isGrenade);
+
+    public int GetDamage() =>
+        GameFlow.StatisticData.GetValue(
+            ItemEffectType.AbilityPower, WorldStatisticsGroup.Enemy, Level
+        );
 }

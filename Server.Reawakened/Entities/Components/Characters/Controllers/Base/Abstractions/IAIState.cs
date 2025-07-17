@@ -1,16 +1,17 @@
-﻿using static A2m.Server.ExtLevelEditor;
+﻿using Server.Reawakened.Entities.Enemies.EnemyTypes;
+using static A2m.Server.ExtLevelEditor;
 
 namespace Server.Reawakened.Entities.Components.Characters.Controllers.Base.Abstractions;
 
 public interface IAIState
 {
-    public void SetStateMachine(IAIStateMachine machine);
+    string StateName { get; }
 
-    public string StateName { get; }
+    void StartState();
+    void UpdateState();
+    void StopState();
 
-    public void StartState();
-    public void UpdateState();
-    public void StopState();
-
-    public ComponentSettings GetFullSettings();
+    ComponentSettings GetFullSettings();
+    void SetStateMachine(IAIStateMachine machine);
+    void SetEnemyController(AIStateEnemy enemyController);
 }
