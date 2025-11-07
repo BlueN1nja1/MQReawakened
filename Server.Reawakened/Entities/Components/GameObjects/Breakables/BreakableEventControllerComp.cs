@@ -44,28 +44,29 @@ public class BreakableEventControllerComp : Component<BreakableEventController>,
         Damageable ??= Room.GetEntityFromId<SpiderBreakableComp>(Id);
 
         _spawner = Room.GetEntityFromId<BaseSpawnerControllerComp>(Id);
+        
         if (_spawner is not null && _spawner.HasLinkedArena)
             CanBreak = false;
-
-        var box = new Rect(Rectangle.X, Rectangle.Y, Rectangle.Width, Rectangle.Height);
-        var position = new Vector3(Position.X, Position.Y, Position.Z);
 
         if (ObjStatus == null)
             return;
 
-        Room.AddCollider(new BreakableCollider(Id, position, box, ParentPlane, Room, ObjStatus.EnemyTarget));
+        _ = new BreakableCollider(this, ObjStatus.EnemyTarget);
     }
 
     public void Damage(int damage, Elemental damageType, Player origin)
     {
         if (Room.IsObjectKilled(Id) || !CanBreak || Damageable is null)
+        {
+            Logger.LogWarning("Attempted to damage an unbreakable or already destroyed object: '{PrefabName}' ({Id}), Can Break: {CanBreak}, Damageable: {Damageable}", PrefabName, Id, CanBreak, Damageable != null);
             return;
+        }
 
         Logger.LogInformation("Damaged object: '{PrefabName}' ({Id})", PrefabName, Id);
 
         RunDamage(damage, damageType);
 
-        origin.Room.SendSyncEvent(new AiHealth_SyncEvent(Id.ToString(), Room.Time, Damageable.CurrentHealth, damage, 0, 0, origin.CharacterName, false, true));
+        Room.SendSyncEvent(new AiHealth_SyncEvent(Id.ToString(), Room.Time, Damageable.CurrentHealth, damage, 0, 0, origin == null ? string.Empty : origin.CharacterName, false, true));
 
         if (Damageable.CurrentHealth <= 0)
         {
@@ -73,9 +74,12 @@ public class BreakableEventControllerComp : Component<BreakableEventController>,
                 foreach (var trigger in Room.GetEntitiesFromId<TriggerReceiverComp>(_spawner.OnDeathTargetID))
                     trigger.TriggerStateChange(TriggerType.Activate, true, Id);
 
-            origin.CheckObjective(ObjectiveEnum.Score, Id, PrefabName, 1, ItemCatalog);
-            origin.GrantLoot(Id, LootCatalog, ItemCatalog, InternalAchievement, Logger);
-            origin.SendUpdatedInventory();
+            if (origin != null)
+            {
+                origin.CheckObjective(ObjectiveEnum.Score, Id, PrefabName, 1, ItemCatalog);
+                origin.GrantLoot(Id, LootCatalog, ItemCatalog, InternalAchievement, Logger);
+                origin.SendUpdatedInventory();
+            }
 
             if (_spawner is null || !_spawner.HasLinkedArena)
             {
@@ -88,7 +92,6 @@ public class BreakableEventControllerComp : Component<BreakableEventController>,
                 _spawner.RemoveFromArena();
                 Room.ToggleCollider(Id, false);
             }
-
         }
     }
 

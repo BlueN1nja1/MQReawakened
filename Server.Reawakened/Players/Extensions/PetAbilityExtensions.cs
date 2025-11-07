@@ -33,6 +33,9 @@ public static class PetAbilityExtensions
         pet.InCoopSwitchState = false;
         pet.AbilityCooldown = petOwner.Room.Time + pet.AbilityParams.CooldownTime;
 
+        if (petOwner.TempData.IsKnockedOut)
+            return;
+
         petOwner.Room.SendSyncEvent(new PetState_SyncEvent(petOwner.GameObjectId, petOwner.Room.Time,
             PetInformation.StateSyncType.Ability, petOwner.GetSyncParams(pet.AbilityParams)));
 
@@ -72,6 +75,9 @@ public static class PetAbilityExtensions
 
         var player = timer.Player;
 
+        if (player.TempData.IsKnockedOut)
+            return;
+
         if (!player.Character.Pets.TryGetValue(player.GetEquippedPetId(new ServerRConfig()), out var pet))
         {
             player.SendDeactivateState();
@@ -88,6 +94,9 @@ public static class PetAbilityExtensions
             return;
 
         var player = timer.Player;
+
+        if (player.TempData.IsKnockedOut)
+            return;
 
         if (!player.Character.Pets.TryGetValue(player.GetEquippedPetId
             (new ServerRConfig()), out var pet) || !pet.AbilityParams.IsAttackAbility())
@@ -117,6 +126,9 @@ public static class PetAbilityExtensions
 
         var player = timer.Player;
 
+        if (player.TempData.IsKnockedOut)
+            return;
+
         if (!player.Character.Pets.ContainsKey
             (player.GetEquippedPetId(new ServerRConfig())))
         {
@@ -133,6 +145,9 @@ public static class PetAbilityExtensions
             return;
 
         var player = timer.Player;
+
+        if (player.TempData.IsKnockedOut)
+            return;
 
         if (!player.Character.Pets.ContainsKey
             (player.GetEquippedPetId(new ServerRConfig())))
@@ -161,8 +176,8 @@ public static class PetAbilityExtensions
             pet.AbilityParams.EnemyInDetectionZone(enemy, petPosition)))
         {
             var distanceFromPlayer = (int)Math.Sqrt(
-                Math.Pow(petPosition.x - enemy.Position.x, 2) +
-                Math.Pow(petPosition.y - enemy.Position.y, 2));
+                Math.Pow(petPosition.x - enemy.Position.X, 2) +
+                Math.Pow(petPosition.y - enemy.Position.Y, 2));
 
             enemies.TryAdd(distanceFromPlayer, enemy);
         }
@@ -180,16 +195,16 @@ public static class PetAbilityExtensions
     }
 
     private static bool EnemyInDetectionZone(this PetAbilityParams abilityParams, BaseEnemy enemy, Vector3 petPosition) =>
-       petPosition.x + abilityParams.DetectionZone.x >= enemy.Position.x &&
-          petPosition.y + abilityParams.DetectionZone.y >= enemy.Position.y &&
-          petPosition.x - abilityParams.DetectionZoneOffset.x <= enemy.Position.x &&
-          petPosition.y - abilityParams.DetectionZoneOffset.y <= enemy.Position.y;
+       petPosition.x + abilityParams.DetectionZone.x >= enemy.Position.X &&
+        petPosition.y + abilityParams.DetectionZone.y >= enemy.Position.Y &&
+        petPosition.x - abilityParams.DetectionZoneOffset.x <= enemy.Position.X &&
+        petPosition.y - abilityParams.DetectionZoneOffset.y <= enemy.Position.Y;
 
     private static bool EnemyInDamageZone(this PetAbilityParams abilityParams, BaseEnemy enemy, Vector3 petPosition) =>
-        petPosition.x + abilityParams.DamageArea.x >= enemy.Position.x &&
-        petPosition.y + abilityParams.DamageArea.y >= enemy.Position.y &&
-        petPosition.x - abilityParams.DamageAreaOffset.x <= enemy.Position.x &&
-        petPosition.y - abilityParams.DamageAreaOffset.y <= enemy.Position.y;
+        petPosition.x + abilityParams.DamageArea.x >= enemy.Position.X &&
+        petPosition.y + abilityParams.DamageArea.y >= enemy.Position.Y &&
+        petPosition.x - abilityParams.DamageAreaOffset.x <= enemy.Position.X &&
+        petPosition.y - abilityParams.DamageAreaOffset.y <= enemy.Position.Y;
 
     public static bool IsAttackAbility(this PetAbilityParams abilityParams) =>
         abilityParams.AbilityType is
@@ -199,10 +214,5 @@ public static class PetAbilityExtensions
             PetAbilityType.DamageOverTimeFromAbove;
 
     private static Vector3 GetCurrentPetPos(this Player petOwner) =>
-        new()
-        {
-            x = petOwner.TempData.Position.x,
-            y = petOwner.TempData.Position.y,
-            z = petOwner.TempData.Position.z
-        };
+        petOwner.TempData.Position.ToUnityVector3();
 }

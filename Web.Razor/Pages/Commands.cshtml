@@ -1,4 +1,4 @@
-﻿@page
+﻿@page "/commands"
 @using Server.Reawakened.XMLs.Data.Commands
 @using Web.Razor.Pages
 @model CommandsModel
@@ -9,48 +9,56 @@
 
 @section Scripts {
     <script>
-        $(document).ready(function () {
-            $('.options-toggle').click(function () {
-                var $this = $(this);
-                var targetId = $this.data('target');
-                var $target = $(targetId);
-
-                if ($target.hasClass('show')) {
-                    $this.text('Show Options');
-                } else {
-                    $this.text('Hide Options');
+        (function(){
+            function findLocalToggle(el){
+                const id = el.id;
+                return $(el).siblings('.options-toggle[data-target="#'+id+'"]').first();
+            }
+            $(document).on('show.bs.collapse', '.options-collapse', function(){
+                const $btn = findLocalToggle(this);
+                if($btn.length){
+                    $btn.addClass('open').attr('aria-expanded','true').find('.options-toggle-label').text('Hide Options');
+                    $btn.find('.options-toggle-icon').text('−');
                 }
             });
-        });
+            $(document).on('hide.bs.collapse', '.options-collapse', function(){
+                const $btn = findLocalToggle(this);
+                if($btn.length){
+                    $btn.removeClass('open').attr('aria-expanded','false').find('.options-toggle-label').text('Show Options');
+                    $btn.find('.options-toggle-icon').text('+');
+                }
+            });
+        })();
     </script>
 }
 
-<div class="container card-text-body">
-    <header class="text-center my-4 site-header">
-        <h1 class="mb-0">@ViewData["ServerName"] Command Reference</h1>
-        <p class="site-description">Note! Commands may not be fully implemented, or may not work on older versions of MQ.</p>
-    </header>
+<section class="mq-container mt-space fade-in">
+    @await Html.PartialAsync("_PanelShell", new Web.Razor.Pages.Shared.PanelShellModel { Title = (string)ViewData["ServerName"] + " Command Reference", Description = "Note: Some commands may not be fully implemented or may not work on older versions.", CenterHeader = true, AdditionalClasses = "flow panel-p-lg", Reveal = false })
     @functions {
+        private static int _optCounter = 0;
         private void RenderParameter(ParameterModel parameter, string parentId)
         {
-            var optionsId = $"{parentId.Replace("/", "").ToLower()}-{parameter.Name.Replace("/", "").ToLower()}";
-            <div class="card my-2 parameter-card">
-                <div class="card-body">
-                    <h5 class="card-title">
+            var baseId = $"{parentId.Replace("/", "").ToLower()}-{parameter.Name.Replace("/", "").ToLower()}";
+            var uniqueSuffix = System.Threading.Interlocked.Increment(ref _optCounter);
+            var optionsId = $"{baseId}-{uniqueSuffix}";
+            <div class="parameter-nest" style="margin-top:10px;" data-reveal>
+                <div>
+                    <h5 style="font-size:.75rem; margin:0 0 4px; color:var(--mq-color-accent-soft); letter-spacing:.5px;">
                         @parameter.Name
                         @if (parameter.Optional)
                         {
                             <span class="optional-indicator">(Optional)</span>
                         }
                     </h5>
-                    <p class="card-text">@parameter.Description</p>
+                    <p style="font-size:.65rem; line-height:1.25; color:var(--mq-color-text-dim); margin:0 0 6px;">@parameter.Description</p>
                     @if (parameter.Options != null && parameter.Options.Any())
                     {
                         <div class="options-collapse collapse" id="@optionsId">
+                            <div class="options-list-modern">
                             @foreach (var option in parameter.Options)
                             {
-                                <div class="border-left pl-3 option-item">
-                                    <strong>Option:</strong> @option.Name - @option.Description
+                                <div class="option-item">
+                                    <div class="option-line"><span class="option-name">@option.Name</span><span class="option-sep">–</span><span class="option-desc">@option.Description</span></div>
                                     @if (option.Parameters != null && option.Parameters.Any())
                                     {
                                         int parameterId = 0;
@@ -62,53 +70,58 @@
                                     }
                                 </div>
                             }
+                            </div>
                         </div>
-                        <button class="options-toggle btn btn-link" data-toggle="collapse" data-target="#@optionsId" aria-expanded="false" aria-controls="@optionsId">
-                            Show Options
+                        <button class="btn-modern btn-pad-sm options-toggle" style="margin-top:6px; font-size:.55rem; letter-spacing:.8px; text-transform:uppercase; display:inline-flex; align-items:center; gap:6px;" data-toggle="collapse" data-target="#@optionsId" aria-expanded="false" aria-controls="@optionsId">
+                            <span class="options-toggle-icon" aria-hidden="true">+</span>
+                            <span class="options-toggle-label">Show Options</span>
                         </button>
                     }
                 </div>
             </div>
         }
 
+        private static bool _firstSectionRendered = false;
         private void RenderCommandList(List<CommandModel> commands, string name)
         {
-            <div class="container">
-                <h2 class="section-header text-center mt-4">@name Commands</h2>
-                <div class="row">
-                    @foreach (var command in commands)
-                    {
-                        <div class="col-md-4 mb-4">
-                            <div class="card command-card h-100">
-                                <div class="card-header">
-                                    <h3>@command.CommandName</h3>
-                                </div>
-                                <div class="card-body">
-                                    <p>@command.CommandDescription</p>
-                                    @if (command.Parameters != null && command.Parameters.Any())
-                                    {
-                                        int parameterId = 0;
-                                        foreach (var parameter in command.Parameters)
-                                        {
-                                            parameterId++;
-                                            RenderParameter(parameter, $"options-{name}-{command.CommandName}-{parameterId}");
-                                        }
-                                    }
-                                </div>
-                                <div class="card-footer @(command.AccessLevel > Server.Base.Accounts.Enums.AccessLevel.Player ? "custom-red" : "custom-blue")">
-                                    Requires: @command.AccessLevel
-                                </div>
-                            </div>
+            var top = _firstSectionRendered ? "1.4rem" : ".85rem"; _firstSectionRendered = true;
+            <h2 class="t-sub" style="margin-top:@top;" data-reveal>@name Commands</h2>
+            <div class="command-grid mt-2" data-reveal>
+                @foreach (var command in commands)
+                {
+                    <div class="command-card-modern" data-reveal>
+                        <div>
+                            <h3>@command.CommandName</h3>
+                            <p>@command.CommandDescription</p>
                         </div>
-                    }
-                </div>
+                        @if (command.Parameters != null && command.Parameters.Any())
+                        {
+                            int parameterId = 0;
+                            foreach (var parameter in command.Parameters)
+                            {
+                                parameterId++;
+                                RenderParameter(parameter, $"options-{name}-{command.CommandName}-{parameterId}");
+                            }
+                        }
+                        <div class="command-meta @(command.AccessLevel > Server.Base.Accounts.Enums.AccessLevel.Player ? "danger" : null)">
+                            <span>Requires @command.AccessLevel</span>
+                        </div>
+                    </div>
+                }
             </div>
         }
     }
-    <div class="commands">
-        @{
-            RenderCommandList(Model.ServerCommands, "Server");
-            RenderCommandList(Model.ClientCommands, "Client");
+    <div class="flow" style="margin-top:.35rem;">
+        @if ((Model.ServerCommands == null || !Model.ServerCommands.Any()) && (Model.ClientCommands == null || !Model.ClientCommands.Any()))
+        {
+            <div class="panel-glass" style="background:rgba(255,255,255,0.02); padding:1.25rem; border-radius:16px; border:1px dashed var(--mq-color-border-accent);">
+                <p style="font-size:.75rem; letter-spacing:.4px; color:var(--mq-color-text-dim); margin:0;">No commands are currently loaded. This usually means the server hasn't finished starting or command bundles are still initializing. Refresh in a moment.</p>
+            </div>
+        }
+        else
+        {
+            RenderCommandList(Model.ServerCommands ?? new List<CommandModel>(), "Server");
+            RenderCommandList(Model.ClientCommands ?? new List<CommandModel>(), "Client");
         }
     </div>
-</div>
+</section>

@@ -15,6 +15,7 @@
         <ServerGarbageCollection>true</ServerGarbageCollection>
         <DebugType>embedded</DebugType>
         <PreserveCompilationContext>true</PreserveCompilationContext>
+        <Platforms>AnyCPU;ARM64</Platforms>
     </PropertyGroup>
 
     <ItemGroup>
@@ -28,6 +29,7 @@
         <ProjectReference Include="..\Protocols.External\Protocols.External.csproj" />
         <ProjectReference Include="..\Protocols.System\Protocols.System.csproj" />
         <ProjectReference Include="..\Server.Base\Server.Base.csproj" />
+        <ProjectReference Include="..\Server.Colliders\Server.Colliders.csproj" />
         <ProjectReference Include="..\Server.Reawakened\Server.Reawakened.csproj" />
         <ProjectReference Include="..\Server.Web\Server.Web.csproj" />
         <ProjectReference Include="..\Web.Apps\Web.Apps.csproj" />

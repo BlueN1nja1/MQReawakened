@@ -1,19 +1,20 @@
-﻿using Server.Reawakened.Core.Configs;
-using Server.Reawakened.Entities.Colliders.Abstractions;
+﻿using Server.Reawakened.Entities.Colliders.Abstractions;
 using Server.Reawakened.Rooms;
+using Server.Reawakened.Rooms.Extensions;
+using Server.Reawakened.Rooms.Models.Planes;
 using UnityEngine;
 
 namespace Server.Reawakened.Entities.Projectiles.Abstractions;
 public abstract class BaseProjectile(string id, float lifetime,
-    Room room, Vector3 position, Vector2 speed, Vector3? endPosition, bool gravity, ServerRConfig config)
+    Room room, Vector3Model position, Vector2 speed, Vector3? endPosition, bool gravity)
 {
     public string ProjectileId => id;
     public Room Room => room;
 
-    public readonly string PrjPlane = position.z > 10 ? config.FrontPlane : config.BackPlane;
+    public string PrjPlane => position.Z.GetPlaneFromZ();
 
-    public Vector3 Position = new() { x = position.x, y = position.y, z = position.z };
-    public Vector3 SpawnPosition = new() { x = position.x, y = position.y, z = position.z };
+    public Vector3Model Position => position;
+    public Vector3 SpawnPosition = new() { x = position.X, y = position.Y, z = position.Z };
 
     public Vector3 Speed = new(speed.x, speed.y, 1);
 
@@ -27,44 +28,42 @@ public abstract class BaseProjectile(string id, float lifetime,
         if (room == null) return;
 
         if (endPosition.HasValue)
-            if (Position.y <= endPosition.Value.y)
-                Hit("-1");
+            if (Position.Y <= endPosition.Value.y)
+                Hit("0");
 
         Move();
 
         var time = room.Time;
 
-        var collisions = Collider.IsColliding(true);
+        var collisions = Collider.RunCollisionDetection();
 
         if (collisions.Length > 0)
             foreach (var collision in collisions)
+            {
                 Hit(collision);
+            }
 
         if (LifeTime <= time)
-            Hit("-1");
+            Hit("0");
     }
 
-    public virtual void Move()
-    {
-        Position = GetPositionBasedOnTime(SpawnPosition);
-        Collider.Position = GetPositionBasedOnTime(Collider.SpawnPosition);
-    }
+    public virtual void Move() => SetPositionBasedOnTime();
 
-    private Vector3 GetPositionBasedOnTime(Vector3 spawnPos)
+    private void SetPositionBasedOnTime()
     {
         var timeDelta = Room.Time - StartTime;
 
         var pos = new Vector3()
         {
-            x = GetCoordFromTime(spawnPos.x, Speed.x, timeDelta),
-            y = GetCoordFromTime(spawnPos.y, Speed.y, timeDelta),
-            z = spawnPos.z
+            x = GetCoordFromTime(SpawnPosition.x, Speed.x, timeDelta),
+            y = GetCoordFromTime(SpawnPosition.y, Speed.y, timeDelta),
+            z = SpawnPosition.z
         };
 
         if (gravity)
             pos.y -= 0.5f * 15f * timeDelta * timeDelta;
 
-        return pos;
+        Position.SetPosition(pos);
     }
 
     private static float GetCoordFromTime(float spawnCoord, float speedCoord, float timeDelta) =>

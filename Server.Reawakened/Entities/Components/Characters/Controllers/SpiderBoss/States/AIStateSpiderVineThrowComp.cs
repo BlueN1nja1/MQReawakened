@@ -17,10 +17,14 @@ public class AIStateSpiderVineThrowComp : BaseAIState<AIStateSpiderVineThrow, AI
             new (AnimationOutTime, "Finish")
         ], loop: false);
 
-
     public void Rise() => Logger.LogTrace("Rise called for {StateName} on {PrefabName}", StateName, PrefabName);
 
     public void ShotVine() => Logger.LogTrace("ShotVine called for {StateName} on {PrefabName}", StateName, PrefabName);
 
-    public void Finish() => Logger.LogTrace("Finish called for {StateName} on {PrefabName}", StateName, PrefabName);
+    public void Finish()
+    {
+        Logger.LogTrace("Finish called for {StateName} on {PrefabName}", StateName, PrefabName);
+        AddNextState<AIStateSpiderWebsComp>();
+        GoToNextState();
+    }
 }

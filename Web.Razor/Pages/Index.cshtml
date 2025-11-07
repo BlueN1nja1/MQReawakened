@@ -6,61 +6,108 @@
 	ViewData["Title"] = "Home Page";
 }
 
-<div class="container mt-4">
-	<div class="card custom-home-card shadow-lg">
-		<div class="card-body">
-			<div class="text-center">
-				<h1 class="display-4">Relive the memory of Ook in <span class="game-title">@Model.ServerName</span>!</h1>
-				<p class="lead">
-					Embark on a legendary journey across the world of Ook. Complete quests, fight monsters, and fend off Ka's shadow army once again!
-				</p>
-				<p class="btn-secondary">Currently online: <span>@Model.PlayerCount</span></p>
-				<p class="btn-secondary">Registered players: <span>@Model.AccountCount</span></p>
+<section class="intro-splash intro-animate" aria-labelledby="intro-heading">
+	<div class="mq-container intro-shell">
+		<div class="intro-main">
+			<h1 id="intro-heading" class="intro-title">
+				Relive the memory of <span class="server-name-accent">Ook</span> in <span class="server-name-accent">@ViewData["ServerName"]</span>!
+			</h1>
+			<p class="intro-lead" data-animate="1">The Monkey King is gone, Ka's shadow still stirs, and five tribes stand ready. Reclaim trails, master elements, craft gear and help rebuild a world full of secrets.</p>
+			<div class="intro-actions" role="group" aria-label="Primary actions" data-animate="2">
+				<a href="/en/signup" class="btn-modern btn-accent btn-pad-lg fx-pop">Create Your Monkey</a>
+				<a href="/download" class="btn-modern btn-outline-jungle btn-pad-lg">Download Launcher</a>
 			</div>
-			<div class="features py-4">
-				<div class="row">
-					<div class="col-md-4 mb-3">
-						<div class="card h-100">
-							<div class="card-body">
-								<h5 class="card-title">
-									Uncover the Mysteries of Ook
-								</h5>
-								<p class="card-text">
-									Explore the many trails and solve the Monkey King's secrets.
-								</p>
-							</div>
-						</div>
-					</div>
-					<div class="col-md-4 mb-3">
-						<div class="card h-100">
-							<div class="card-body">
-								<h5 class="card-title">
-									Gear up your monkey
-								</h5>
-								<p class="card-text">
-									Defeat shadow monsters to find and craft powerful gear.
-								</p>
-							</div>
-						</div>
-					</div>
-					<div class="col-md-4 mb-3">
-						<div class="card h-100">
-							<div class="card-body">
-								<h5 class="card-title">
-									Complete quests with your friends
-								</h5>
-								<p class="card-text">
-									Join one of the tribes in Ook and group up with your fellow monkeys to complete various quests.
-								</p>
-							</div>
-						</div>
-					</div>
-				</div>
+		</div>
+		<div class="intro-meta" role="group" aria-label="Server stats">
+			<div class="meta-pill" aria-live="polite" aria-label="Currently online players">
+				<span class="meta-label">Currently online:</span>
+				<strong class="meta-value">@Model.PlayerCount</strong>
 			</div>
-
-			<div class="signup-cta text-center">
-				<a href="/en/signup" class="btn btn-primary btn-lg">Join the Adventure</a>
+			<div class="meta-pill" aria-label="Registered player accounts">
+				<span class="meta-label">Registered players:</span>
+				<strong class="meta-value">@Model.AccountCount</strong>
 			</div>
 		</div>
 	</div>
-</div>
+	<div class="intro-bg" aria-hidden="true"></div>
+</section>
+
+<section class="mq-container mt-space reveal" data-reveal>
+	<div class="panel-glass panel-p-lg jungle-frame" style="--frame-accent:var(--mq-color-accent);">
+		<h2 class="t-section h-tight">About Ook</h2>
+		<p class="lead" style="font-size:.88rem; line-height:1.55; max-width:860px;">
+			After the Monkey King's last stand against Ka, ruin and strange energy settled over trails and towns. Companions and builders rose up, shaping refuge out of wreckage. New monkeys now pick up the work: clearing shadow creatures, reopening highways and reviving tribe legacies.
+		</p>
+		<div class="vine-divider vine-full" aria-hidden="true"></div>
+		<p style="font-size:.78rem; line-height:1.55; max-width:880px;">
+			Get gear, learn recipes, unlock movement tools and element powers while helping diplomats and founders' successors. Every trail pushed forward brings Ook closer to what it was—before Ka stirred again.
+		</p>
+	</div>
+</section>
+
+<section class="mq-container mt-space reveal" data-reveal>
+	<div class="ui-card card-gradient-border" style="padding:2.25rem 2rem;">
+		<div class="ui-card-header" style="display:flex; align-items:center; gap:.75rem;">
+			<span style="font-size:1.05rem; font-weight:600; letter-spacing:.5px;">The Five Tribes</span>
+		</div>
+		<div class="grid-auto" style="margin-top:1.5rem;">
+			<div class="feature-card" data-accent="amber">
+				<h5 style="display:flex; align-items:center; gap:.4rem;">Sea Dragons</h5>
+				<p style="font-size:.7rem; line-height:1.45;">Pirates of the Smugglers Highway. Find Captain Blacktail commanding Dragontail Square.</p>
+			</div>
+			<div class="feature-card" data-accent="lime">
+				<h5>Chim Foo</h5>
+				<p style="font-size:.7rem; line-height:1.45;">Ninjas hidden in Iron Mountain's fortresses. Led by Grand Master Whisper.</p>
+			</div>
+			<div class="feature-card" data-accent="mist">
+				<h5>Ootu Mystics</h5>
+				<p style="font-size:.7rem; line-height:1.45;">Sages of the Swamps inside Fire Canyon Highway. Seek out Mama Babu.</p>
+			</div>
+			<div class="feature-card" data-accent="lime">
+				<h5>Ice Raiders</h5>
+				<p style="font-size:.7rem; line-height:1.45;">Ice vikings of the caverns. Sigthor holds the mantle.</p>
+			</div>
+			<div class="feature-card" data-accent="amber">
+				<h5>Mek-Tek</h5>
+				<p style="font-size:.7rem; line-height:1.45;">Founded by Trunket and famed for engineering Clock Tower Square.</p>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section class="mq-container mt-space reveal" data-reveal>
+	<div class="grid-auto" style="--mq-space-4:2rem; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+		<div class="panel-glass panel-p-md fx-pop" style="position:relative;">
+			<h3 style="margin-top:0; font-size:1rem; letter-spacing:.5px; display:flex; align-items:center; gap:.4rem;">
+				<span class="tribe-tag" data-tribe="amber">Questing</span>
+			</h3>
+			<p style="font-size:.8rem; line-height:1.5;">Ka's shadow minions have choked key trails, isolating regions and threatening trade. Yet these dangers open paths for fearless monkeys to earn renown, gear and experience as they liberate routes and aid allies.</p>
+			<p style="font-size:.7rem; opacity:.75;">Allies across Ook eagerly trade rewards for your courage.</p>
+		</div>
+		<div class="panel-glass panel-p-md fx-pop" style="position:relative;">
+			<h3 style="margin-top:0; font-size:1rem; letter-spacing:.5px;">
+				<span class="tribe-tag" data-tribe="lime">Crafting</span>
+			</h3>
+			<p style="font-size:.8rem; line-height:1.5;">Why buy gear when you can make it? Recipes—found, rewarded or purchased—unlock tools, equipment and curios. Gather ingredients across zones and forge items directly from your Book of Recipes.</p>
+			<p style="font-size:.7rem; opacity:.75;">Create for yourself, friends, or to barter.</p>
+		</div>
+		<div class="panel-glass panel-p-md fx-pop" style="position:relative;">
+			<h3 style="margin-top:0; font-size:1rem; letter-spacing:.5px;">
+				<span class="tribe-tag" data-tribe="mist">Bestiary</span>
+			</h3>
+			<p style="font-size:.8rem; line-height:1.5;">Shadow creatures and wild natives block trails and guard loot. Learn their patterns, earn materials and clear the way for tribe progress.</p>
+			<p style="font-size:.7rem; opacity:.75;">Knowledge makes tougher fights easier.</p>
+		</div>
+	</div>
+</section>
+
+<section class="mq-container mt-space reveal" data-reveal>
+	<div class="panel-glass panel-p-lg" style="display:flex; flex-direction:column; gap:1.1rem;">
+		<h2 class="t-section" style="margin:0; font-size:1.4rem;">Start your journey in <span class="server-name-accent" style="white-space:nowrap;">@ViewData["ServerName"]</span></h2>
+		<div class="action-row action-row-left" style="gap:.85rem;">
+			<a href="/en/signup" class="btn-modern btn-accent btn-pad-md fx-pop">Create Your Monkey</a>
+			<a href="/download" class="btn-modern btn-outline-jungle btn-pad-md">Get the Launcher</a>
+		</div>
+		<p style="font-size:.65rem; opacity:.65; margin:.25rem 0 0;">Fan remake project – not affiliated with the original publisher.</p>
+	</div>
+</section>

@@ -8,21 +8,14 @@ namespace Web.Launcher.Controllers.Live.Win;
 public class GamePatcherController(LoadUpdates loadUpdates, ILogger<GamePatcherController> logger) : Controller
 {
     [HttpGet]
-    public async Task<IActionResult> GetFile([FromRoute] string gameVersion)
+    public IActionResult GetFile([FromRoute] string gameVersion)
     {
         gameVersion = gameVersion.Replace(".zip", "");
 
         if (loadUpdates.WinClientFiles.TryGetValue(gameVersion, out var path))
         {
-            var memory = new MemoryStream();
-
-            using (var stream = new FileStream(path, FileMode.Open))
-                await stream.CopyToAsync(memory);
-
-            memory.Position = 0;
-
             logger.LogInformation("Downloading patch version: {GameVersion} at path {Path}", gameVersion, path);
-            return File(memory, "application/octet-stream", gameVersion + ".zip");
+            return PhysicalFile(path, "application/octet-stream", enableRangeProcessing: true);
         }
         else
             return NotFound();

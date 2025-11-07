@@ -1,6 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
 using Server.Base.Logging;
 using Server.Reawakened.Entities.Colliders;
+using Server.Reawakened.Entities.Components.GameObjects.Items;
 using Server.Reawakened.Entities.Components.GameObjects.Trigger.Enums;
 using Server.Reawakened.Entities.Components.GameObjects.Trigger.Interfaces;
 using Server.Reawakened.Players;
@@ -28,24 +28,25 @@ public class TriggerReceiverComp : Component<TriggerReceiver>, ICoopTriggered
     public bool ActiveByDefault => ComponentData.ActiveByDefault;
     public TriggerReceiver.ReceiverCollisionType CollisionType => ComponentData.CollisionType;
 
-    public ILogger<TriggerReceiverComp> Logger { get; set; }
     public FileLogger FileLogger { get; set; }
 
     private TriggerReceiverCollider _collider;
 
     public override void InitializeComponent()
     {
-        _collider = new TriggerReceiverCollider(Id, Position.ToUnityVector3(), Rectangle.ToRect(), ParentPlane, Room);
+        if (Room == null || IsChest()) return;
+
+        _collider = new TriggerReceiverCollider(this);
+
         if (CollisionType == TriggerReceiver.ReceiverCollisionType.Never)
             _collider.Active = false;
     }
+
     public override void DelayedComponentInitialization()
     {
         base.InitializeComponent();
+        
         Trigger(ActiveByDefault, string.Empty);
-
-        //This is placed in delayed init so that more important components take collider precedence
-        Room.AddCollider(_collider);
     }
 
     public override void SendDelayedData(Player player) => player.SendSyncEventToPlayer(new TriggerReceiver_SyncEvent(Id, Room.Time, _triggeredBy, Activated, 0));
@@ -160,4 +161,6 @@ public class TriggerReceiverComp : Component<TriggerReceiver>, ICoopTriggered
 
     public void SendTriggerState(bool activated, string triggeredBy) =>
         Room.SendSyncEvent(new TriggerReceiver_SyncEvent(Id.ToString(), Room.Time, triggeredBy, activated, 0));
+
+    private bool IsChest() => Room.GetEntityFromId<ChestControllerComp>(Id) != null;
 }

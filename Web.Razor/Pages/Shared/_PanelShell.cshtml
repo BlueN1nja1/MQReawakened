@@ -1,0 +1,33 @@
+@model Web.Razor.Pages.Shared.PanelShellModel
+<div class="panel-glass card-gradient-border @Model.AdditionalClasses" style="@Model.Style" @(Model.Reveal ? "data-reveal" : null)>
+    @if (Model.ShowHeader && (!string.IsNullOrEmpty(Model.Title) || !string.IsNullOrEmpty(Model.Description) || !string.IsNullOrEmpty(Model.Kicker) || Model.Actions != null))
+    {
+        if (Model.CenterHeader)
+        {
+            <div class="panel-header-center heading-block heading-center h-gap">
+                <div style="max-width:680px;">
+                    @if(!string.IsNullOrEmpty(Model.Kicker)) { <div class="t-sub h-gap-sm">@Model.Kicker</div>; }
+                    @if(!string.IsNullOrEmpty(Model.Title)) { <h2 class="t-display h-tight">@Model.Title</h2>; }
+                    @if(!string.IsNullOrEmpty(Model.Description)) { <p class="t-lead lead-wide" style="margin:.4rem auto 0;">@Model.Description</p>; }
+                </div>
+                @if (Model.Actions != null)
+                {
+                    <div class="heading-actions justify-content-center">@Model.Actions</div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="heading-inline h-gap">
+                <div>
+                    @if(!string.IsNullOrEmpty(Model.Kicker)) { <div class="t-sub h-gap-sm">@Model.Kicker</div>; }
+                    @if(!string.IsNullOrEmpty(Model.Title)) { <h2 class="t-display h-tight">@Model.Title</h2>; }
+                    @if(!string.IsNullOrEmpty(Model.Description)) { <p class="t-lead lead-wide" style="margin-top:.3rem;">@Model.Description</p>; }
+                </div>
+                @if (Model.Actions != null)
+                {
+                    <div class="heading-actions" style="flex-shrink:0;">@Model.Actions</div>
+                }
+            </div>
+        }
+    }

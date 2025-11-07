@@ -21,6 +21,12 @@ public class AIStateSpiderDropComp : BaseAIState<AIStateSpiderDrop, AI_State_Dro
             new (GetUpDuration, "Dropped")
         ], FloorY);
 
+    public override void OnAIStateIn()
+    {
+        base.OnAIStateIn();
+        State.Init(Position.ToVector3());
+    }
+
     public override ExtLevelEditor.ComponentSettings GetSettings() =>
         [Position.X.ToString(), FloorY.ToString(), Position.Z.ToString()];
 
@@ -42,7 +48,9 @@ public class AIStateSpiderDropComp : BaseAIState<AIStateSpiderDrop, AI_State_Dro
     {
         Logger.LogTrace("Dropped called for {StateName} on {PrefabName}", StateName, PrefabName);
 
-        Room.GetEntityFromId<SpiderBossControllerComp>(Id).OnGround = true;
+        var controller = Room.GetEntityFromId<SpiderBossControllerComp>(Id);
+        controller.OnGround = true;
+        controller.MarkTeaserFightStart();
 
         RunIdleState();
     }

@@ -1,7 +1,9 @@
 ﻿using Server.Base.Core.Extensions;
+using Server.Reawakened.Entities.Colliders;
 using Server.Reawakened.Players.Models.Groups;
 using Server.Reawakened.Players.Models.Trade;
 using Server.Reawakened.Rooms.Models.Entities;
+using Server.Reawakened.Rooms.Models.Planes;
 using UnityEngine;
 using Timer = Server.Base.Timers.Timer;
 
@@ -9,6 +11,7 @@ namespace Server.Reawakened.Players.Models.Misc;
 
 public class TemporaryDataModel
 {
+    public int ProjectileId { get; set; } = -1;
     public string GameObjectId { get; set; } = "0";
     public int Direction { get; set; } = 0;
     public int Locale { get; set; }
@@ -25,11 +28,12 @@ public class TemporaryDataModel
     public bool IsSuperStomping { get; set; } = false;
     public bool IsSlowed { get; set; } = false;
     public BaseComponent CurrentArena { get; set; } = null;
+    public bool IsKnockedOut { get; set; } = false;
 
     public List<string> CollidingHazards { get; set; } = [];
     public Dictionary<int, bool> VotedForItem { get; set; } = [];
 
-    public Vector3 Position { get; set; } = new Vector3();
+    public Vector3Model Position { get; set; } = new Vector3Model(0, 0, 0);
     public Vector3 Velocity { get; set; } = new Vector3();
 
     public TradeModel TradeModel { get; set; }
@@ -40,6 +44,8 @@ public class TemporaryDataModel
     public bool FirstLogin { get; set; } = true;
     public long CurrentPing { get; set; } = GetTime.GetCurrentUnixMilliseconds();
 
+    public PlayerCollider PlayerCollider { get; set; }
+
     public Vector3 CopyPosition() =>
-        new(Position.x, Position.y, Position.z);
+        new(Position.X, Position.Y, Position.Z);
 }

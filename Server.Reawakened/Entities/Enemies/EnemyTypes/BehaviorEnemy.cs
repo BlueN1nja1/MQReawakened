@@ -2,7 +2,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Server.Base.Timers.Services;
-using Server.Reawakened.Entities.Colliders;
 using Server.Reawakened.Entities.Components.AI.Stats;
 using Server.Reawakened.Entities.Enemies.Behaviors.Abstractions;
 using Server.Reawakened.Entities.Enemies.EnemyTypes.Abstractions;
@@ -13,7 +12,7 @@ using Server.Reawakened.Players;
 using Server.Reawakened.Players.Extensions;
 using Server.Reawakened.Rooms;
 using Server.Reawakened.Rooms.Extensions;
-using Server.Reawakened.Rooms.Services;
+using Server.Reawakened.Rooms.Models.Planes;
 using Server.Reawakened.XMLs.Data.Enemy.Enums;
 using Server.Reawakened.XMLs.Data.Enemy.Models;
 using UnityEngine;
@@ -31,29 +30,30 @@ public class BehaviorEnemy(EnemyData data) : BaseEnemy(data)
     public StateType CurrentState;
     public AIBaseBehavior CurrentBehavior;
 
-    private object _enemyLock;
     private float _lastUpdate;
 
     public TimerThread TimerThread;
 
     public override void Initialize()
     {
-        _enemyLock = new object();
         TimerThread = Services.GetRequiredService<TimerThread>();
 
         Global = Room.GetEntityFromId<AIStatsGlobalComp>(Id);
         Generic = Room.GetEntityFromId<AIStatsGenericComp>(Id);
 
-        var classCopier = Services.GetRequiredService<ClassCopier>();
+        EnemyModel.GlobalProperties?.ApplyGlobalPropertiesFromModel(Global);
+        EnemyModel.GenericScript?.ApplyGenericPropertiesFromModel(Global);
+
+        Generic.SetDefaultPatrolRange();
 
         AiData = new AIProcessData
         {
-            Intern_SpawnPosX = Position.x,
-            Intern_SpawnPosY = Position.y,
-            Intern_SpawnPosZ = Position.z,
-            Sync_PosX = Position.x,
-            Sync_PosY = Position.y,
-            Sync_PosZ = Position.z,
+            Intern_SpawnPosX = Position.X,
+            Intern_SpawnPosY = Position.Y,
+            Intern_SpawnPosZ = Position.Z,
+            Sync_PosX = Position.X,
+            Sync_PosY = Position.Y,
+            Sync_PosZ = Position.Z,
             SyncInit_Dir = 0,
             SyncInit_ProgressRatio = Generic.Patrol_InitialProgressRatio
         };
@@ -71,42 +71,27 @@ public class BehaviorEnemy(EnemyData data) : BaseEnemy(data)
 
         Behaviors = EnemyModel.BehaviorData.ToDictionary(s => s.Key, s => s.Value.GetBaseBehaviour(this));
 
+        base.Initialize();
+
         Room.SendSyncEvent(
             AISyncEventHelper.AIInit(
-                Position.x, Position.y, Position.z,
-                Position.x, Position.y,
-                Generic.Patrol_InitialProgressRatio, this
+                Position.X, Position.Y, Position.Z,
+                Position.X, Position.Y,
+                Generic?.Patrol_InitialProgressRatio ?? 0f, this
             )
         );
 
-        ChangeBehavior(StateType.Patrol, Position.x, Position.y, Generic.Patrol_ForceDirectionX);
-
-        base.Initialize();
-    }
-
-    public override void CheckForSpawner()
-    {
-        base.CheckForSpawner();
-
-        if (LinkedSpawner == null)
-            return;
-
-        // Should use apt template rather than first
-        var spawnerTemplate = LinkedSpawner.TemplateEnemyModels.FirstOrDefault().Value;
-
-        if (spawnerTemplate is null)
-        {
-            Logger.LogError("Spawner with {Id} has invalid templates! Returning...", LinkedSpawner.Id);
-            return;
-        }
-
-        Global = spawnerTemplate.Global;
-        Generic = spawnerTemplate.Generic;
-        Status = spawnerTemplate.Status;
+        ChangeBehavior(StateType.Patrol, Position.X, Position.Y, Generic.Patrol_ForceDirectionX);
     }
 
     public override void InternalUpdate()
     {
+        Position.SetPosition(
+            AiData.Sync_PosX,
+            AiData.Sync_PosY,
+            AiData.Sync_PosZ
+        );
+
         var hasDetected = false;
 
         if (CurrentBehavior.ShouldDetectPlayers)
@@ -118,41 +103,35 @@ public class BehaviorEnemy(EnemyData data) : BaseEnemy(data)
                 if (AiData.Intern_FireProjectile)
                     FireProjectile(false);
 
-            if (CurrentState == Global.AwareBehavior || CurrentState == StateType.LookAround)
+            if (Global != null && (CurrentState == Global.AwareBehavior || CurrentState == StateType.LookAround))
                 if (Room.Time >= _lastUpdate + CurrentBehavior.GetBehaviorTime())
                     CurrentBehavior.NextState();
         }
-
-        Position = new Vector3(AiData.Sync_PosX, AiData.Sync_PosY, Position.z);
-
-        Hitbox.Position = new Vector3(
-            AiData.Sync_PosX,
-            AiData.Sync_PosY - (EnemyController.Scale.Y < 0 ? Hitbox.BoundingBox.height : 0),
-            Position.z
-        );
     }
 
     public bool HasDetectedPlayers()
     {
-        var rect = new Rect(
-            Hitbox.Position.x - (AiData.Intern_Dir < 0 ? Global.Global_FrontDetectionRangeX : Global.Global_BackDetectionRangeX) - Hitbox.BoundingBox.width / 2,
-            Hitbox.Position.y - (AiData.Intern_Dir < 0 ? Global.Global_FrontDetectionRangeDownY : Global.Global_BackDetectionRangeDownY) - Hitbox.BoundingBox.height / 2,
-            Global.Global_FrontDetectionRangeX + Global.Global_BackDetectionRangeX + Hitbox.BoundingBox.width,
-            Global.Global_BackDetectionRangeDownY + Global.Global_FrontDetectionRangeDownY + Hitbox.BoundingBox.height
-        );
-
-        var enemyCollider = new EnemyCollider(Id, Vector3.zero, rect, ParentPlane, Room);
+        if (!this.TryGetDetectionCollider(out var enemyCollider))
+            return false;
 
         foreach (var player in Room.GetPlayers())
         {
-            if (
-                enemyCollider.CheckCollision(new PlayerCollider(player)) &&
-                (!Global.Global_DetectionLimitedByPatrolLine || player.TempData.Position.x > AiData.Intern_MinPointX && player.TempData.Position.x < AiData.Intern_MaxPointX) &&
-                ParentPlane == player.GetPlayersPlaneString() && !player.Character.StatusEffects.HasEffect(ItemEffectType.Invisibility) &&
-                player.Character.CurrentLife > 0)
+            if (player == null)
+                continue;
+
+            var temp = player.TempData;
+            var character = player.Character;
+            var statusEffects = character.StatusEffects;
+
+            var collides = temp.PlayerCollider != null && enemyCollider.CheckCollision(temp.PlayerCollider);
+            var withinPatrol = !Global.Global_DetectionLimitedByPatrolLine || temp != null && temp.Position.X > AiData.Intern_MinPointX && temp.Position.X < AiData.Intern_MaxPointX;
+            var samePlane = ParentPlane == player.GetPlayersPlaneString();
+            var invisible = statusEffects.HasEffect(ItemEffectType.Invisibility);
+            var alive = character.CurrentLife > 0;
+
+            if (collides && withinPatrol && samePlane && !invisible && alive)
             {
                 EnemyAggroPlayer(player);
-
                 return true;
             }
         }
@@ -162,12 +141,11 @@ public class BehaviorEnemy(EnemyData data) : BaseEnemy(data)
 
     public void FireProjectile(bool isGrenade)
     {
-        var position = new Vector3
-        {
-            x = Position.x + AiData.Intern_Dir * Global.Global_ShootOffsetX,
-            y = Position.y + Global.Global_ShootOffsetY,
-            z = Position.z
-        };
+        var position = new Vector3Model(
+            Position.X + AiData.Intern_Dir * Global.Global_ShootOffsetX,
+            Position.Y + Global.Global_ShootOffsetY,
+            Position.Z
+        );
 
         var speed = new Vector2
         {
@@ -179,39 +157,35 @@ public class BehaviorEnemy(EnemyData data) : BaseEnemy(data)
 
         AiData.Intern_FireProjectile = false;
     }
-    
+
     public void ChangeBehavior(StateType behaviourType, float targetX, float targetY, int direction)
     {
-        lock (_enemyLock)
+        if (direction == 0)
+            direction = AiData.Intern_Dir;
+
+        if (AiData.Intern_PendingSpeedFactor >= 0f)
         {
-            // Syncs direction of client entity with server
-            if (direction == 0)
-                direction = AiData.Intern_Dir;
-
-            if (AiData.Intern_PendingSpeedFactor >= 0f)
-            {
-                AiData.Sync_SpeedFactor = AiData.Intern_PendingSpeedFactor;
-                AiData.Intern_AnimSpeed = AiData.Intern_PendingSpeedFactor;
-                AiData.Intern_PendingSpeedFactor = -1f;
-            }
-
-            CurrentBehavior?.Stop();
-
-            CurrentBehavior = Behaviors[behaviourType];
-            CurrentState = behaviourType;
-
-            Behaviors[behaviourType].Start();
-
-            _lastUpdate = Room.Time;
-
-            Room.SendSyncEvent(
-                AISyncEventHelper.AIDo(
-                    Position.x, Position.y, 1.0f,
-                    targetX, targetY, direction, CurrentState == Global.AwareBehavior,
-                    this
-                )
-            );
+            AiData.Sync_SpeedFactor = AiData.Intern_PendingSpeedFactor;
+            AiData.Intern_AnimSpeed = AiData.Intern_PendingSpeedFactor;
+            AiData.Intern_PendingSpeedFactor = -1f;
         }
+
+        CurrentBehavior?.Stop();
+
+        CurrentBehavior = Behaviors[behaviourType];
+        CurrentState = behaviourType;
+
+        Behaviors[behaviourType].Start();
+
+        _lastUpdate = Room.Time;
+
+        Room.SendSyncEvent(
+            AISyncEventHelper.AIDo(
+                Position.X, Position.Y, 1.0f,
+                targetX, targetY, direction, Global != null && CurrentState == Global.AwareBehavior,
+                this
+            )
+        );
     }
 
     public override void Damage(Player player, int damage)
@@ -239,7 +213,7 @@ public class BehaviorEnemy(EnemyData data) : BaseEnemy(data)
         player.SendSyncEventToPlayer(
             AISyncEventHelper.AIDo(
                 AiData.Sync_PosX, AiData.Sync_PosY, 1.0f,
-                AiData.Sync_TargetPosX, AiData.Sync_TargetPosY, AiData.Intern_Dir, CurrentState == Global.AwareBehavior,
+                AiData.Sync_TargetPosX, AiData.Sync_TargetPosY, AiData.Intern_Dir, Global != null && CurrentState == Global.AwareBehavior,
                 this
             )
         );
@@ -253,12 +227,14 @@ public class BehaviorEnemy(EnemyData data) : BaseEnemy(data)
             return;
         }
 
-        AiData.Sync_TargetPosX = player.TempData.Position.x;
-        AiData.Sync_TargetPosY = player.TempData.Position.y;
+        Logger.LogTrace("Enemy {PrefabName} aggroed on player {PlayerName}", PrefabName, player.CharacterName);
+
+        AiData.Sync_TargetPosX = player.TempData.Position.X;
+        AiData.Sync_TargetPosY = player.TempData.Position.Y;
 
         ChangeBehavior(
             Global.AttackBehavior,
-            player.TempData.Position.x, player.TempData.Position.y,
+            player.TempData.Position.X, player.TempData.Position.Y,
             Generic.Patrol_ForceDirectionX
         );
     }

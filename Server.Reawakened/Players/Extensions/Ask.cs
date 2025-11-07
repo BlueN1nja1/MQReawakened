@@ -2,6 +2,7 @@
 using Server.Base.Database.Accounts;
 using Server.Reawakened.Database.Characters;
 using Server.Reawakened.Database.Users;
+using Server.Base.Core.Extensions;
 
 namespace Server.Reawakened.Players.Extensions;
 
@@ -10,9 +11,9 @@ public static class Ask
     public static void GetCharacter(Microsoft.Extensions.Logging.ILogger logger, AccountHandler accountHandler,
         UserInfoHandler userInfoHandler, CharacterHandler characterHandler, out CharacterModel model, out UserInfoModel user)
     {
-        logger.LogInformation("Please enter the username of whom you wish to find:");
+        logger.LogError("Please enter the username of whom you wish to find:");
 
-        var userName = Console.ReadLine()?.Trim();
+        var userName = ConsoleExt.ReadLineOrDefault(logger, null)?.Trim();
 
         var account = accountHandler.GetAccountFromUsername(userName);
 
@@ -39,17 +40,17 @@ public static class Ask
             return;
         }
 
-        logger.LogInformation("Please select the ID for the character you want to run this command for:");
+        logger.LogError("Please select the ID for the character you want to run this command for:");
 
         foreach (var possibleCharacter in user.CharacterIds)
         {
             var character = characterHandler.GetCharacterFromId(possibleCharacter);
 
-            logger.LogInformation("    {CharacterId}: {CharacterName}",
+            logger.LogError("    {CharacterId}: {CharacterName}",
                 possibleCharacter, character.Write.CharacterName);
         }
 
-        var id = Console.ReadLine();
+        var id = ConsoleExt.ReadLineOrDefault(logger, null);
 
         if (!int.TryParse(id, out var intId))
         {

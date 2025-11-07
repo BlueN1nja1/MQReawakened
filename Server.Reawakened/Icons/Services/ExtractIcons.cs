@@ -16,7 +16,7 @@ public class ExtractIcons(IconsRConfig rConfig, IconsRwConfig rwConfig, AssetBun
 {
     private string[] _knownIconNames = [];
 
-    public bool HasIcon(string name) => _knownIconNames.Contains(name.ToUpper());
+    public bool HasIcon(string name) => _knownIconNames.Length > 0 && _knownIconNames.Contains(name.ToUpper());
 
     public void ExtractAllIcons(Dictionary<string, InternalAssetInfo> internalAssets)
     {
@@ -191,10 +191,10 @@ public class ExtractIcons(IconsRConfig rConfig, IconsRwConfig rwConfig, AssetBun
 
                 File.WriteAllBytes(path, stream.ToArray());
             }
-            catch (TypeInitializationException e)
+            catch (TypeInitializationException)
             {
                 defaultBar.Dispose();
-                logger.LogError(e, "Texture DLL files did not initialise! This is a known bug for linux users.");
+                logger.LogError("Texture DLL files did not initialise! This is a known bug for linux users.");
                 return;
             }
             catch (IOException e)

@@ -1,10 +1,12 @@
 ﻿using A2m.Server;
 using Microsoft.Extensions.Logging;
+using Server.Base.Accounts.Extensions;
 using Server.Reawakened.Core.Configs;
 using Server.Reawakened.Core.Services;
 using Server.Reawakened.Network.Extensions;
 using Server.Reawakened.Network.Protocols;
 using Server.Reawakened.Players;
+using Server.Reawakened.Players.Extensions;
 
 namespace Protocols.External._a__ChatHandler;
 
@@ -21,6 +23,18 @@ public class FreeChat : ExternalProtocol
         var channelType = (CannedChatChannel)Convert.ToInt32(message[5]);
         var chatMessage = message[6];
         var recipientName = message[7];
+
+        if (!Config.Chat)
+        {
+            Player.SendWarningMessage("chat");
+            return;
+        }
+
+        if (Player.Account.IsMuted())
+        {
+            Player.Chat(CannedChatChannel.Tell, "Console", "You are muted" + Player.Account.FormatMuteTime() + ".");
+            return;
+        }
 
         switch (channelType)
         {

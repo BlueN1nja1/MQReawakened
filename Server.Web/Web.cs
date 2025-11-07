@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.DataProtection;
 using Server.Base.Core.Abstractions;
 using Server.Web.Abstractions;
 using Server.Web.Middleware;
@@ -18,12 +19,30 @@ public class Web(ILogger<Web> logger) : WebModule(logger)
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.AddSwaggerGen(c => c.SwaggerDoc("v1", new OpenApiInfo { Title = "MQR API", Version = "v1" }));
         services.AddRazorPages();
+
+        services.AddHealthChecks();
     }
 
     public override void InitializeWeb(WebApplicationBuilder builder)
     {
         builder.WebHost.CaptureStartupErrors(true);
         builder.Services.AddMemoryCache();
+
+        try
+        {
+            var keyRoot = Environment.GetEnvironmentVariable("KEYS_PATH") ?? "/data";
+            var keyDir = Path.Combine(keyRoot, "keys");
+            Directory.CreateDirectory(keyDir);
+            builder.Services.AddDataProtection()
+                .PersistKeysToFileSystem(new DirectoryInfo(keyDir))
+                .SetApplicationName("MQReawakened");
+        }
+        catch (Exception ex)
+        {
+            builder.Logging.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Warning);
+            using var lf = LoggerFactory.Create(cfg => cfg.AddConsole());
+            lf.CreateLogger("DataProtection").LogWarning(ex, "Failed to configure persistent data protection keys; falling back to ephemeral keys.");
+        }
     }
 
     public override void PostWebBuild(WebApplication app)
@@ -55,5 +74,7 @@ public class Web(ILogger<Web> logger) : WebModule(logger)
 
         app.MapRazorPages();
         app.MapControllers();
+
+        app.MapHealthChecks("/healthz");
     }
 }

@@ -18,6 +18,19 @@ public class OperationMode(EventSink eventSink, ServerConsole console, InternalR
         console.AddCommand("changeOperationalMode", "Changes the mode the game is set to (client/server/both)",
             NetworkType.Unknown | NetworkType.Server | NetworkType.Client, _ => ChangeNetworkType());
 
+        var networkTypeEnv = Environment.GetEnvironmentVariable("NETWORK_TYPE");
+
+        if (!string.IsNullOrWhiteSpace(networkTypeEnv) && Enum.TryParse<NetworkType>(networkTypeEnv, true, out var parsed))
+            config.NetworkType = parsed;
+
+        var serverAddressEnv = Environment.GetEnvironmentVariable("SERVER_ADDRESS");
+        
+        if (!string.IsNullOrWhiteSpace(serverAddressEnv))
+            config.ServerAddress = serverAddressEnv;
+
+        if (int.TryParse(Environment.GetEnvironmentVariable("GAME_PORT"), out var p))
+            config.Port = p;
+
         if (config.NetworkType == NetworkType.Unknown)
             ChangeNetworkType();
 
@@ -33,6 +46,20 @@ public class OperationMode(EventSink eventSink, ServerConsole console, InternalR
 
     private void AskForChange()
     {
+        if (EnvironmentExt.IsContainer())
+        {
+            config.NetworkType = NetworkType.Server;
+
+            if (string.IsNullOrWhiteSpace(config.ServerAddress))
+            {
+                var envAddr = Environment.GetEnvironmentVariable("SERVER_ADDRESS");
+                config.ServerAddress = string.IsNullOrWhiteSpace(envAddr) ? "localhost" : envAddr;
+            }
+
+            logger.LogInformation("Set IP Address to: {Address}", config.ServerAddress);
+            return;
+        }
+
         // This should not be changed as the default values should be set to run a server via docker.
         if (logger.Ask(
                 "Are you wanting to play the game, rather than host one?",

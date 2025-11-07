@@ -57,11 +57,6 @@ public class ServerRConfig : IRConfig
     public float PlayerWidth { get; }
     public float PlayerHeight { get; }
 
-    public string FrontPlane { get; }
-    public string BackPlane { get; }
-
-    public Dictionary<string, int> Planes { get; }
-
     public int CashKitAmount { get; }
 
     public string DailyBoxName { get; }
@@ -83,6 +78,11 @@ public class ServerRConfig : IRConfig
     public int BreathTimerDuration { get; }
     public int UnderwaterDamageInterval { get; }
     public int UnderwaterDamageRatio { get; }
+
+    public bool Chat { get; set; }
+    public bool Trading { get; set; }
+    public bool Vendor { get; set; }
+    public bool Gifting { get; set; }
 
     public ServerRConfig()
     {
@@ -118,19 +118,19 @@ public class ServerRConfig : IRConfig
             { DebugHandler.DebugVariables.Sharder_2, false },
             { DebugHandler.DebugVariables.Ewallet, true },
             { DebugHandler.DebugVariables.Chat, true },
-            { DebugHandler.DebugVariables.BugReport, true },
+            { DebugHandler.DebugVariables.BugReport, false },
             { DebugHandler.DebugVariables.Crisp, true },
             { DebugHandler.DebugVariables.Trade, true }
         };
 
         CashKitAmount = 100000;
 
-        KickAfterTime = TimeSpan.FromMinutes(5).TotalMilliseconds;
+        KickAfterTime = TimeSpan.FromMinutes(10).TotalMilliseconds;
 
         LogAllSyncEvents = true;
         ClearCache = true;
 
-        AccessRights = (int)UserAccessRight.NoDictionaryChat;
+        AccessRights = (int)UserAccessRight.Invalid;
 
         TutorialTribe2014 = new Dictionary<TribeType, int>
         {
@@ -189,21 +189,17 @@ public class ServerRConfig : IRConfig
             { GameVersion.v2011, string.Empty }
         };
 
-        FrontPlane = "Plane1";
-        BackPlane = "Plane0";
-
-        Planes = new Dictionary<string, int>()
-        {
-            { FrontPlane, 0 },
-            { BackPlane, 20 }
-        };
-
         LastClientUpdate = 0;
         CutOffFor2014 = 0;
 
-        Gravity = 15f;
+        Gravity = 14f;
 
         PetHotbarIndex = 4;
+
+        Chat = true;
+        Trading = true;
+        Vendor = true;
+        Gifting = true;
 
         FXWaterSplashName = "FX_WaterSplash";
         BreathTimerDuration = 31;

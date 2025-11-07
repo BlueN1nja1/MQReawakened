@@ -49,10 +49,11 @@ public class Room : Timer
     private readonly Dictionary<string, BaseProjectile> _projectiles;
     private readonly Dictionary<string, BaseEnemy> _enemies;
     private readonly Dictionary<string, Player> _players;
-    private readonly Dictionary<string, BaseCollider> _colliders;
+    private readonly Dictionary<string, List<BaseCollider>> _colliders;
 
     private readonly HashSet<string> _gameObjectIds;
     private readonly HashSet<string> _killedObjects;
+    private readonly HashSet<string> _killedUpdatingObjects;
 
     public ILogger<Room> Logger;
 
@@ -68,6 +69,8 @@ public class Room : Timer
     public InternalColliders ColliderCatalog;
 
     public WorldHandler World;
+
+    public HashSet<string> LoggedComponentKeys { get; }
 
     public CheckpointControllerComp LastCheckpoint { get; set; }
 
@@ -105,22 +108,32 @@ public class Room : Timer
 
         _players = [];
         _gameObjectIds = [];
-        DuplicateEntities = [];
         _killedObjects = [];
+        _killedUpdatingObjects = [];
         _enemies = [];
+        _colliders = [];
+
+        DuplicateEntities = [];
+        LoggedComponentKeys = [];
 
         if (LevelInfo.Type == LevelType.Unknown)
         {
             Planes = [];
             _entities = [];
-            _colliders = [];
 
             return;
         }
 
-        Planes = LevelInfo.LoadPlanes(this, _config);
+        Logger.LogTrace("Creating room with room id: {RoomId}", roomId);
+
+        Planes = LevelInfo.LoadPlanes(_config);
+        Logger.LogTrace("Loaded planes");
+
         _entities = this.LoadEntities(services);
-        _colliders = this.LoadTerrainColliders();
+        Logger.LogTrace("Loaded entities");
+        
+        this.LoadTerrainColliders();
+        Logger.LogTrace("Loaded colliders");
 
         _defaultSpawn = GetEntitiesFromType<SpawnPointComp>().MinBy(p => p.Index);
 
@@ -133,11 +146,35 @@ public class Room : Timer
                 )
             _gameObjectIds.Add(gameObjectId);
 
-        foreach (var component in _entities.Values.SelectMany(x => x))
-            component.InitializeComponent();
+        Logger.LogTrace("Loaded spawn point");
 
         foreach (var component in _entities.Values.SelectMany(x => x))
-            component.DelayedComponentInitialization();
+        {
+            try
+            {
+                component.InitializeComponent();
+            }
+            catch (Exception e)
+            {
+                Logger.LogError(e, "Ran into an issue initializing component: {component}", component.Name);
+            }
+        }
+
+        Logger.LogTrace("Initialized components");
+
+        foreach (var component in _entities.Values.SelectMany(x => x))
+        {
+            try
+            {
+                component.DelayedComponentInitialization();
+            }
+            catch (Exception e)
+            {
+                Logger.LogError(e, "Ran into an issue initializing component: {component}", component.Name);
+            }
+        }
+
+        Logger.LogTrace("Initialized delayed components");
 
         if (_defaultSpawn == null)
             Logger.LogError("Could not find default spawn for level: {RoomId} ({RoomName})",
@@ -145,17 +182,28 @@ public class Room : Timer
 
         TimeOffset = GetTime.GetCurrentUnixMilliseconds();
 
+        Logger.LogTrace("Starting room with room id: {RoomId}", roomId);
+
         Start();
     }
 
     public override void OnTick()
     {
-        var entitiesCopy = _entities.Values.SelectMany(s => s).ToList();
-        var projectilesCopy = _projectiles.Values.ToList();
-        var enemiesCopy = _enemies.Values.ToList();
+        List<BaseComponent> entitiesCopy;
+        List<BaseProjectile> projectilesCopy;
+        List<BaseEnemy> enemiesCopy;
+        List<Player> playersCopy;
+
+        lock (_roomLock)
+        {
+            entitiesCopy = [.. _entities.Values.SelectMany(s => s)];
+            projectilesCopy = [.. _projectiles.Values];
+            enemiesCopy = [.. _enemies.Values];
+            playersCopy = [.. _players.Values];
+        }
 
         foreach (var entityComponent in entitiesCopy)
-            if (!IsObjectKilled(entityComponent.Id))
+            if (!IsObjectKilled(entityComponent.Id) || _killedUpdatingObjects.Contains(entityComponent.Id))
                 entityComponent.Update();
 
         foreach (var projectile in projectilesCopy)
@@ -164,7 +212,7 @@ public class Room : Timer
         foreach (var enemy in enemiesCopy)
             enemy.Update();
 
-        foreach (var player in _players?.Values)
+        foreach (var player in playersCopy)
         {
             if (GetTime.GetCurrentUnixMilliseconds() - player.TempData.CurrentPing > _config.KickAfterTime)
             {
@@ -173,8 +221,7 @@ public class Room : Timer
             }
             else
             {
-                var playerCollider = new PlayerCollider(player);
-                playerCollider.IsColliding(false);
+                player.TempData.PlayerCollider?.RunCollisionDetection();
             }
         }
 
@@ -183,6 +230,8 @@ public class Room : Timer
 
     public void AddClient(Player currentPlayer, out JoinReason reason)
     {
+        Logger.LogTrace("Adding player to room {RoomId}", _roomId);
+
         reason = _players.Count > _config.PlayerCap ? JoinReason.Full : JoinReason.Accepted;
 
         if (LevelInfo.LevelId == -1)
@@ -235,10 +284,13 @@ public class Room : Timer
 
     public void RemoveClient(Player player)
     {
+        Logger.LogTrace("Removing player from room {RoomId}", _roomId);
+
         lock (_roomLock)
         {
             _players.Remove(player.GameObjectId);
             _gameObjectIds.Remove(player.GameObjectId);
+            RemoveCollider(player.GameObjectId);
         }
 
         if (LevelInfo.LevelId <= 0)
@@ -315,44 +367,70 @@ public class Room : Timer
 
     // Players
 
-    public Player GetPlayerById(string id) =>
-        _players.TryGetValue(id, out var value) ? value : null;
+    public Player GetPlayerById(string id)
+    {
+        lock (_roomLock)
+            return _players.TryGetValue(id, out var value) ? value : null;
+    }
 
-    public Player[] GetPlayers() =>
-        [.. _players.Values];
+    public Player[] GetPlayers()
+    {
+        lock (_roomLock)
+            return [.. _players.Values];
+    }
 
     // Colliders
 
-    public void AddCollider(BaseCollider collider)
+    private void AddColliderList(string colliderId)
     {
         lock (_roomLock)
-            _colliders.TryAdd(collider.Id, collider);
+        {
+            if (!_colliders.ContainsKey(colliderId))
+                _colliders.Add(colliderId, []);
+        }
     }
 
-    public void OverwriteCollider(BaseCollider collider)
+    public void AddColliderToList(BaseCollider collider)
     {
+        AddColliderList(collider.Id);
+
         lock (_roomLock)
-            _colliders[collider.Id] = collider;
+        {
+            _colliders[collider.Id].Add(collider);
+        }
+
+        Logger.LogTrace("Added collider with id {ColliderId} to room {RoomId}", collider.Id, _roomId);
     }
 
     public void RemoveCollider(string colliderId)
     {
         lock (_roomLock)
             _colliders.Remove(colliderId);
+        
+        Logger.LogTrace("Removed collider with id {ColliderId} from room {RoomId}", colliderId, _roomId);
     }
 
     public void ToggleCollider(string colliderId, bool active)
     {
         if (_colliders.TryGetValue(colliderId, out var collider))
             lock (_roomLock)
-                collider.Active = active;
+                foreach (var col in collider)
+                    col.Active = active;
+        
+        Logger.LogTrace("Toggled collider with id {ColliderId} to {Active} in room {RoomId}", colliderId, active, _roomId);
     }
 
-    public BaseCollider GetColliderById(string id) =>
-        _colliders.TryGetValue(id, out var value) ? value : null;
+    public List<BaseCollider> GetCollidersById(string id)
+    {
+        lock (_roomLock)
+            return _colliders.TryGetValue(id, out var value) ? [.. value] : [];
+    }
 
-    public BaseCollider[] GetColliders() =>
-        [.. _colliders.Values];
+    public BaseCollider[] GetColliders()
+    {
+        lock (_roomLock)
+            return [.. _colliders.Values.SelectMany(x => x)];
+    }
 
     // Spawn Points
 
@@ -399,26 +477,33 @@ public class Room : Timer
                 _entities[id] = entity;
     }
 
-    public void RemoveEntity(string id)
+    public bool ContainsEntity(string id)
     {
         lock (_roomLock)
-            _entities.Remove(id);
+            return _entities.ContainsKey(id);
     }
 
-    public bool ContainsEntity(string id) =>
-        _entities.ContainsKey(id);
+    public Dictionary<string, List<BaseComponent>> GetEntities()
+    {
+        lock (_roomLock)
+            return new Dictionary<string, List<BaseComponent>>(_entities);
+    }
 
-    public Dictionary<string, List<BaseComponent>> GetEntities() => _entities;
+    public T GetEntityFromId<T>(string id) where T : class
+    {
+        lock (_roomLock)
+            return _entities.TryGetValue(id, out var entities) ?
+                entities.FirstOrDefault(x => x is T and not null) as T :
+                null;
+    }
 
-    public T GetEntityFromId<T>(string id) where T : class =>
-        _entities.TryGetValue(id, out var entities) ?
-            entities.FirstOrDefault(x => x is T and not null) as T :
-            null;
-
-    public object GetEntityFromId(string id, Type t) =>
-        _entities.TryGetValue(id, out var entities) ?
-            entities.FirstOrDefault(x => x != null && t.IsInstanceOfType(x)) :
-            null;
+    public object GetEntityFromId(string id, Type t)
+    {
+        lock (_roomLock)
+            return _entities.TryGetValue(id, out var entities) ?
+                entities.FirstOrDefault(x => x != null && t.IsInstanceOfType(x)) :
+                null;
+    }
 
     public IEnemyController GetEnemyFromId(string id)
     {
@@ -426,15 +511,21 @@ public class Room : Timer
         return enemy != null ? enemy : GetEntityFromId<ArmoredEnemyControllerComp>(id);
     }
 
-    public T[] GetEntitiesFromId<T>(string id) where T : class =>
-        _entities.TryGetValue(id, out var entities) ?
-            [.. entities.Where(x => x is T and not null).Select(x => x as T)] :
-            [];
+    public T[] GetEntitiesFromId<T>(string id) where T : class
+    {
+        lock (_roomLock)
+            return _entities.TryGetValue(id, out var entities) ?
+                [.. entities.Where(x => x is T and not null).Select(x => x as T)] :
+                [];
+    }
 
-    public T[] GetEntitiesFromType<T>() where T : class =>
-        typeof(T) == typeof(BaseComponent)
-            ? _entities.Values.SelectMany(x => x).ToArray() as T[]
-            : [.. _entities.SelectMany(x => x.Value).Where(x => x is T and not null).Select(x => x as T)];
+    public T[] GetEntitiesFromType<T>() where T : class
+    {
+        lock (_roomLock)
+            return typeof(T) == typeof(BaseComponent)
+                ? _entities.Values.SelectMany(x => x).ToArray() as T[]
+                : [.. _entities.SelectMany(x => x.Value).Where(x => x is T and not null).Select(x => x as T)];
+    }
 
     // Projectiles
 
@@ -444,45 +535,46 @@ public class Room : Timer
             _projectiles.Add(projectile.ProjectileId, projectile);
     }
 
-    public void SetProjectile(BaseProjectile projectile)
-    {
-        lock (_roomLock)
-            _projectiles[projectile.ProjectileId] = projectile;
-    }
-
     public void RemoveProjectile(string projectileId)
     {
         lock (_roomLock)
-            _projectiles.Remove(projectileId);
+        {
+            if (_projectiles.TryGetValue(projectileId, out var projectile))
+            {
+                RemoveCollider(projectile.Collider.Id);
+                _projectiles.Remove(projectileId);
+            }
+        }
     }
 
     public int CreateProjectileId()
     {
-        var projectileId = Math.Abs(new Random().Next());
-        var containsId = false;
-
-
         lock (_roomLock)
-            containsId = _gameObjectIds.Contains(projectileId.ToString());
-
-        return containsId ?
-            CreateProjectileId() :
-            projectileId;
+        {
+            var projectileId = Math.Abs(new Random().Next());
+            while (_gameObjectIds.Contains(projectileId.ToString()))
+                projectileId = Math.Abs(new Random().Next());
+            _gameObjectIds.Add(projectileId.ToString());
+            return projectileId;
+        }
     }
 
-    public void AddRangedProjectile(string ownerId, Vector3 position, Vector2 speed,
+    public void AddRangedProjectile(string ownerId, Vector3Model position, Vector2 speed,
         float lifeTime, int damage, ItemEffectType effect, bool isGrenade)
     {
         var projectileId = CreateProjectileId();
 
+        var size = new RectModel(-0.25f, -0.25f, 0.5f, 0.5f);
+        var prjPosition = new Vector3Model(position.X, position.Y, position.Z);
+
         var aiProjectile = new AIProjectile(
-            this, ownerId, projectileId.ToString(), position, speed,
-            lifeTime, _timerThread, damage, effect, isGrenade, _config, ItemCatalog, _itemConfig
+            this, ownerId, projectileId.ToString(), prjPosition, size,
+            speed, lifeTime, _timerThread, damage, effect, isGrenade, _config, ItemCatalog
         );
 
         this.SendSyncEvent(
             AISyncEventHelper.AILaunchItem(
-                ownerId, Time, position, speed, lifeTime, projectileId, isGrenade
+                ownerId, Time, position.ToUnityVector3(), speed, lifeTime, projectileId, isGrenade
             )
         );
 
@@ -495,12 +587,6 @@ public class Room : Timer
     {
         lock (_roomLock)
             _killedObjects.Add(killedEnemy);
-    }
-
-    public void RemoveKilledEnemy(string killedEnemy)
-    {
-        lock (_roomLock)
-            _killedObjects.Remove(killedEnemy);
     }
 
     public bool IsObjectKilled(string id)
@@ -533,6 +619,19 @@ public class Room : Timer
         AddKilledEnemy(id);
     }
 
+    // Updating Killed Enemies
+    public void AddUpdatingKilledEnemy(string killedEnemy)
+    {
+        lock (_roomLock)
+            _killedUpdatingObjects.Add(killedEnemy);
+    }
+
+    public void RemoveUpdatingKilledEnemy(string killedEnemy)
+    {
+        lock (_roomLock)
+            _killedUpdatingObjects.Remove(killedEnemy);
+    }
+
     // Enemies
 
     public void AddEnemy(BaseEnemy enemy)
@@ -549,13 +648,23 @@ public class Room : Timer
         RemoveCollider(enemyId);
     }
 
-    public BaseEnemy[] GetEnemies() =>
-        [.. _enemies.Values];
+    public BaseEnemy[] GetEnemies()
+    {
+        lock (_roomLock)
+            return [.. _enemies.Values];
+    }
 
-    public BaseEnemy GetEnemy(string id) => _enemies.TryGetValue(id, out var value) ? value : null;
+    public BaseEnemy GetEnemy(string id)
+    {
+        lock (_roomLock)
+            return _enemies.TryGetValue(id, out var value) ? value : null;
+    }
 
-    public bool ContainsEnemy(string enemyId) =>
-        _enemies.ContainsKey(enemyId);
+    public bool ContainsEnemy(string enemyId)
+    {
+        lock (_roomLock)
+            return _enemies.ContainsKey(enemyId);
+    }
 
     // Cleanup
     private void CleanData()
@@ -579,9 +688,9 @@ public class Room : Timer
 
         Planes.Clear();
         UnknownEntities.Clear();
-        _enemies.Clear();
         DuplicateEntities.Clear();
 
+        _enemies.Clear();
         _entities.Clear();
         _projectiles.Clear();
     }

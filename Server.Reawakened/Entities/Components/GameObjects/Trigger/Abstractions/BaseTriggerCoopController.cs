@@ -1,4 +1,5 @@
 ﻿using A2m.Server;
+using Microsoft.Extensions.Logging;
 using Server.Base.Logging;
 using Server.Reawakened.Core.Configs;
 using Server.Reawakened.Entities.Colliders;
@@ -11,7 +12,6 @@ using Server.Reawakened.Rooms.Extensions;
 using Server.Reawakened.Rooms.Models.Entities;
 using Server.Reawakened.XMLs.Bundles.Base;
 using System.Text;
-using UnityEngine;
 using static TriggerCoopController;
 
 namespace Server.Reawakened.Entities.Components.GameObjects.Trigger.Abstractions;
@@ -195,11 +195,7 @@ public abstract class BaseTriggerCoopController<T> : Component<T>, ITriggerComp,
 
         if (TriggerOnNormalDamage || TriggerOnAirDamage || TriggerOnEarthDamage
             || TriggerOnFireDamage || TriggerOnIceDamage || TriggerOnLightningDamage)
-        {
-            var box = new Rect(Rectangle.X, Rectangle.Y, Rectangle.Width, Rectangle.Height);
-            var position = new Vector3(Position.X, Position.Y, Position.Z);
-            Room.AddCollider(new TriggerableTargetCollider(Id, position, box, ParentPlane, Room));
-        }
+            _ = new TriggerableTargetCollider(this);
     }
 
     public override void DelayedComponentInitialization() => RunTrigger(null);
@@ -299,7 +295,6 @@ public abstract class BaseTriggerCoopController<T> : Component<T>, ITriggerComp,
         player.Character.Pets.TryGetValue(player.GetEquippedPetId(ServerRConfig), out pet) && !pet.InCoopState() &&
                 (InteractType == InteractionType.PetChain || InteractType == InteractionType.PetSwitch);
 
-
     public void SendInteractionUpdate()
     {
         if (TriggerReceiverActivated() && StayTriggeredOnReceiverActivated) return;
@@ -314,11 +309,13 @@ public abstract class BaseTriggerCoopController<T> : Component<T>, ITriggerComp,
 
     public virtual void Triggered(Player player, bool isSuccess, bool isActive)
     {
-
+        // Intended to be overridden by child classes
     }
 
     public void TriggerInteraction(ActivationType type, Player player)
     {
+        Room.Logger.LogTrace("TriggerInteraction called with type {Type} by player {Player}.", type, player?.CharacterName ?? "null");
+
         if (!Activations.Contains(type))
             return;
 
@@ -517,13 +514,43 @@ public abstract class BaseTriggerCoopController<T> : Component<T>, ITriggerComp,
 
     public void QuestAdded(QuestDescription quest, Player player)
     {
-        if (QuestInProgressRequired == quest.Name)
+        var sb = new StringBuilder();
+        sb.AppendLine($"Callback: QuestAdded")
+            .AppendLine($"TriggerId: {Id}")
+            .AppendLine($"Quest: {quest?.Name} ({quest?.Id})")
+            .AppendLine($"Player: {player?.CharacterName}");
+
+        FileLogger?.WriteGenericLog<TriggerCoopController>(
+                "quest-callbacks",
+                $"[QuestAdded]",
+                sb.ToString(),
+                LoggerType.Trace
+        );
+
+        if (CurrentPhysicalInteractors.Contains(player.GameObjectId))
+        {
             RunTrigger(player);
+        }
     }
 
     public void QuestCompleted(QuestDescription quest, Player player)
     {
-        if (QuestCompletedRequired == quest.Name)
+        var sb = new StringBuilder();
+        sb.AppendLine($"Callback: QuestCompleted")
+            .AppendLine($"TriggerId: {Id}")
+            .AppendLine($"Quest: {quest?.Name} ({quest?.Id})")
+            .AppendLine($"Player: {player?.CharacterName}");
+
+        FileLogger?.WriteGenericLog<TriggerCoopController>(
+                "quest-callbacks",
+                $"[QuestCompleted]",
+                sb.ToString(),
+                LoggerType.Trace
+        );
+
+        if (CurrentPhysicalInteractors.Contains(player.GameObjectId))
+        {
             RunTrigger(player);
+        }
     }
 }

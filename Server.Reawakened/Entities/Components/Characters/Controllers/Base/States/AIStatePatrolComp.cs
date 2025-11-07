@@ -73,7 +73,7 @@ public class AIStatePatrolComp : BaseAIState<AIStatePatrol, AI_State_Patrol>
         State.Init(Position.ToVector3());
     }
 
-    public Player GetClosestPlayer() => Room.GetClosetPlayer(Position.ToUnityVector3(), DetectionRange);
+    public Player GetClosestPlayer() => Room.GetClosestPlayer(Position.ToUnityVector3(), DetectionRange);
 
     public override void Execute()
     {
@@ -118,28 +118,23 @@ public class AIStatePatrolComp : BaseAIState<AIStatePatrol, AI_State_Patrol>
         var playerPos = player.TempData.Position;
         var enemyPos = Position.ToUnityVector3();
 
-        if (Mathf.Abs(playerPos.y - enemyPos.y) > MaximumYDifferenceOnDetection)
+        if (Mathf.Abs(playerPos.Y - enemyPos.y) > MaximumYDifferenceOnDetection)
             return false;
 
-        var distance = Vector3.Distance(enemyPos, playerPos);
+        var distance = Vector3.Distance(enemyPos, playerPos.ToUnityVector3());
 
-        if (distance < MinimumRange || distance > DetectionRange)
-            return false;
-
-        if (DetectOnlyInPatrolZone && !IsPlayerInPatrolZone(player))
-            return false;
-
-        return true;
+        return distance >= MinimumRange && distance <= DetectionRange && (!DetectOnlyInPatrolZone || IsPlayerInPatrolZone(player));
     }
 
     private bool IsPlayerInPatrolZone(Player player)
     {
         var playerPos = player.TempData.Position;
+        
         var minX = Mathf.Min(Position.X + Patrol1.x, Position.X + Patrol2.x) - PatrolZoneSizeOffset;
         var maxX = Mathf.Max(Position.X + Patrol1.x, Position.X + Patrol2.x) + PatrolZoneSizeOffset;
         var minY = Mathf.Min(Position.Y + Patrol1.y, Position.Y + Patrol2.y) - PatrolZoneSizeOffset;
         var maxY = Mathf.Max(Position.Y + Patrol1.y, Position.Y + Patrol2.y) + PatrolZoneSizeOffset;
 
-        return playerPos.x >= minX && playerPos.x <= maxX && playerPos.y >= minY && playerPos.y <= maxY;
+        return playerPos.X >= minX && playerPos.X <= maxX && playerPos.Y >= minY && playerPos.Y <= maxY;
     }
 }

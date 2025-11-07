@@ -5,17 +5,14 @@
     ViewData["Title"] = "Help";
 }
 
-<div class="container d-flex justify-content-center align-items-center">
-    <div class="card signup-card">
-        <div class="row g-0">
-            <div class="col-md-6 info-container">
-                <img class="site_logo rounded-circle" src="/_content/Web.Razor/logo.png" alt="Site Logo" />
-                <p class="description">Help</p>
-                <h3 class="text-warning">Please visit our Discord server to receive help with @ViewData["ServerName"].</h3>
-            </div>
-            <div class="col-md-6 form-container">
-                <iframe src="https://discord.com/widget?id=@Model.ServerId&theme=dark" class="discord-widget" allowtransparency="true"></iframe>
+<section class="mq-container mt-space fade-in">
+    @await Html.PartialAsync("_PanelShell", new Web.Razor.Pages.Shared.PanelShellModel { Title = "Help & Support", Description = "Visit our Discord server to receive help with " + (string)ViewData["ServerName"] + ".", AdditionalClasses = "panel-p-lg flow" })
+        <div class="row">
+            <div class="col-12" data-reveal>
+                <div class="discord-shell">
+                    <iframe title="Discord Server" src="https://discord.com/widget?id=@Model.ServerId&theme=dark" class="discord-widget" allowtransparency="true"></iframe>
+                </div>
             </div>
         </div>
     </div>
-</div>
+</section>

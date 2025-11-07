@@ -21,6 +21,6 @@ public class StartPlayRoom : ExternalProtocol
         var tribe = Player.Room.LevelInfo.Tribe;
         Player.DiscoverTribe(tribe);
 
-        Player.Room.AddCollider(new PlayerCollider(Player));
+        Player.TempData.Invincible = true;
     }
 }

@@ -16,7 +16,6 @@ public class LinearPlatformComp : BaseMovingObjectControllerComp<LinearPlatform>
     public float DelayBeforeStart => ComponentData.DelayBeforeStart;
     public bool TriggeredBySwitch => ComponentData.TriggeredBySwitch;
 
-    private MovingPlatformCollider _collider;
     public override void InitializeComponent()
     {
         var distance = new vector3(DistanceX, DistanceY, DistanceZ);
@@ -29,31 +28,23 @@ public class LinearPlatformComp : BaseMovingObjectControllerComp<LinearPlatform>
             Movement.Activated, Room.Time, InitialProgressRatio
         );
 
-        _collider = new MovingPlatformCollider(
-            Id,
-            Position.ToUnityVector3(),
-            Rectangle.ToRect(),
-            ParentPlane,
-            Room
-         );
-
-        Room.AddCollider(_collider);
-
         base.InitializeComponent();
+
+        _ = new MovingPlatformCollider(this);
     }
 
     public override void Update()
     {
-        if (Room == null)
+        var movement = (Platform_Linear_Movement)Movement;
+        
+        if (movement == null || Room == null)
             return;
 
-        base.Update();
-        var movement = (Platform_Linear_Movement)Movement;
         movement.UpdateState(Room.Time);
 
         if (!ComponentData.TriggeredBySwitch)
             movement.Activate(Room.Time);
 
-        _collider.Position = Position.ToUnityVector3();
+        base.Update();
     }
 }

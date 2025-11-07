@@ -5,15 +5,21 @@ using Server.Reawakened.Players;
 using Server.Reawakened.Players.Extensions;
 using Server.Reawakened.Rooms;
 using Server.Reawakened.Rooms.Extensions;
-using UnityEngine;
+using Server.Reawakened.Rooms.Models.Planes;
 
 namespace Server.Reawakened.Entities.Colliders;
-public class PlayerCollider(Player player) :
-    BaseCollider(player.TempData.GameObjectId, player.TempData.CopyPosition(),
-        new Rect(-0.5f, 0, 1, 1), player.GetPlayersPlaneString(), player.Room, ColliderType.Player
-    )
+
+public class PlayerCollider(Player player) : BaseCollider
 {
+    public static RectModel playerBounds = new (-0.5f, 0, 1, 1.5f);
+
     public Player Player => player;
+    public override Vector3Model Position => Player.TempData.Position;
+    public override Room Room => player.Room;
+    public override string Id => player.TempData.GameObjectId;
+    public override RectModel BoundingBox => playerBounds;
+    public override string Plane => player.GetPlayersPlaneString();
+    public override ColliderType Type => ColliderType.Player;
 
     public override void SendCollisionEvent(BaseCollider received)
     {
@@ -29,7 +35,7 @@ public class PlayerCollider(Player player) :
             player.ApplyCharacterDamage(damage, aiProjectileCollider.Id, 1, aiProjectileCollider.ServerRConfig, aiProjectileCollider.TimerThread);
             player.TemporaryInvincibility(aiProjectileCollider.TimerThread, aiProjectileCollider.ServerRConfig, 1);
 
-            Room.RemoveCollider(aiProjectileCollider.PrjId);
+            Room.RemoveCollider(aiProjectileCollider.Id);
         }
 
         if (received is HazardEffectCollider hazard)
@@ -48,20 +54,13 @@ public class PlayerCollider(Player player) :
         }
     }
 
-    public override string[] IsColliding(bool isAttack)
-    {
-        var colliders = Room.GetColliders();
+    public override bool CanCollideWithType(BaseCollider collider) =>
+        collider.Type switch
+        {
+            ColliderType.Player => false,
+            ColliderType.Attack => false,
+            _ => true
+        };
 
-        List<string> collidedWith = [];
-
-        foreach (var collider in colliders)
-            if (CheckCollision(collider) &&
-                collider.Type != ColliderType.Player && collider.Type != ColliderType.Attack)
-            {
-                collidedWith.Add(collider.Id);
-                collider.SendCollisionEvent(this);
-            }
-
-        return [.. collidedWith];
-    }
+    public override string[] RunCollisionDetection() => RunBaseCollisionDetection();
 }

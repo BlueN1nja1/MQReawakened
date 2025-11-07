@@ -1,5 +1,6 @@
 ﻿using Server.Base.Accounts.Extensions;
 using Server.Reawakened.Database.Characters;
+using Server.Reawakened.Entities.Colliders;
 using Server.Reawakened.Network.Extensions;
 using Server.Reawakened.Players;
 using Server.Reawakened.Players.Extensions;
@@ -16,16 +17,35 @@ public static class PlayerExtensions
 {
     private static void JoinRoom(this Player player, Room room, out JoinReason reason)
     {
-        player.Room?.RemoveClient(player);
+        if (player.Room != null)
+        {
+            player.Room.RemoveClient(player);
+            player.Room.RemoveCollider(player.TempData.PlayerCollider.Id);
+        }
+
         player.Room = room;
+
         player.Room.AddClient(player, out reason);
+        player.TempData.PlayerCollider = new PlayerCollider(player);
+    }
+
+    public static void RemovePlayerProjectile(this Player player)
+    {
+        if (player.TempData.ProjectileId <= 0)
+            return;
+
+        player.Room.RemoveProjectile(player.TempData.ProjectileId.ToString());
+        player.TempData.ProjectileId = -1;
     }
 
     public static void QuickJoinRoom(this Player player, int id, WorldHandler worldHandler, out JoinReason reason) =>
         player.JoinRoom(worldHandler.GetRoomFromLevelId(id, player), out reason);
 
+    public static string GetPlaneFromZ(this float z) =>
+        Math.Abs(z) > 10 ? "Plane1" : "Plane0";
+
     public static string GetPlayersPlaneString(this Player player)
-        => player.TempData.Position.z > 0 ? "Plane1" : "Plane0";
+        => player.TempData.Position.Z.GetPlaneFromZ();
 
     public static int GetLevelId(this Player player) =>
         player.Character?.LevelId ?? -1;
@@ -110,7 +130,7 @@ public static class PlayerExtensions
 
     public static List<GameObjectModel> GetPlaneEntities(this Player player)
     {
-        var planeName = player.TempData.Position.z > 10 ? "Plane1" : "Plane0";
+        var planeName = player.GetPlayersPlaneString();
         return [.. player.Room.Planes[planeName].GameObjects.Values.SelectMany(x => x)];
     }
 

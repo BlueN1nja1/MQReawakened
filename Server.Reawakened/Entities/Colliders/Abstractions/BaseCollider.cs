@@ -1,70 +1,66 @@
 ﻿using Server.Reawakened.Entities.Colliders.Enums;
 using Server.Reawakened.Entities.Components.GameObjects.Attributes;
 using Server.Reawakened.Rooms;
+using Server.Reawakened.Rooms.Models.Planes;
 using UnityEngine;
 
 namespace Server.Reawakened.Entities.Colliders.Abstractions;
+
 public abstract class BaseCollider
 {
-    public readonly Room Room;
-    public readonly string Id;
-    public readonly string Plane;
-    public readonly ColliderType Type;
-    public readonly Vector3 SpawnPosition;
-    public readonly Rect BoundingBox;
-    public readonly bool IsInvisible;
+    public abstract Room Room { get; }
+    public abstract string Id { get; }
+    public abstract Vector3Model Position { get; }
+    public abstract RectModel BoundingBox { get; }
+    public abstract string Plane { get; }
+    public abstract ColliderType Type { get; }
 
-    private Vector3 internalPosition = Vector3.zero;
-    private Rect colliderBox = new(0, 0, 0, 0);
+    public bool IsInvisible { get; private set; }
+    public bool Active { get; set; }
 
-    public bool Active;
-    public Vector3 Position
+    public Rect ColliderBox => new(
+            Position.X + BoundingBox.X,
+            Position.Y + BoundingBox.Y,
+            BoundingBox.Width,
+            BoundingBox.Height
+        );
+
+    protected BaseCollider(bool addToRoom = true)
     {
-        get => internalPosition;
-        set
-        {
-            internalPosition = value;
-            colliderBox = new Rect(
-                internalPosition.x + BoundingBox.x,
-                internalPosition.y + BoundingBox.y,
-                BoundingBox.width,
-                BoundingBox.height
-            );
-        }
-    }
-
-    protected BaseCollider(string id, Vector3 position, Rect boundingBox, string plane, Room room, ColliderType colliderType)
-    {
-        Room = room;
-        Id = id;
-        Plane = plane;
-        Type = colliderType;
-        BoundingBox = boundingBox;
-        SpawnPosition = new Vector3(position.x, position.y, position.z);
         Active = true;
 
-        var invis = Room.GetEntityFromId<InvisibilityControllerComp>(Id);
-        IsInvisible = invis != null && invis.ApplyInvisibility;
+        var invisible = Room.GetEntityFromId<InvisibilityControllerComp>(Id);
 
-        // MUST be at bottom so collider generates correctly.
-        Position = new Vector3(position.x, position.y, position.z);
+        IsInvisible = invisible != null && invisible.ApplyInvisibility;
+
+        if (addToRoom)
+            Room.AddColliderToList(this);
     }
 
-    public virtual string[] IsColliding() => [];
+    public virtual string[] RunCollisionDetection() => [];
 
-    public virtual string[] IsColliding(bool isAttack) => [];
+    public virtual void SendCollisionEvent(BaseCollider received) { }
 
-    public virtual void SendCollisionEvent(BaseCollider received)
-    {
-    }
-
-    public virtual void SendNonCollisionEvent(BaseCollider received)
-    {
-    }
-
-    private static bool RectOverlapsRect(Rect rA, Rect rB) =>
-        rA.x < rB.x + rB.width && rA.x + rA.width > rB.x && rA.y < rB.y + rB.height && rA.y + rA.height > rB.y;
-    
     public bool CheckCollision(BaseCollider collided) =>
-        RectOverlapsRect(collided.colliderBox, colliderBox) && Plane == collided.Plane;
+        collided.ColliderBox.Overlaps(ColliderBox) && Plane == collided.Plane;
+
+    public virtual bool CanCollideWithType(BaseCollider collider) => false;
+    public virtual bool CanOverrideInvisibleDetection() => true;
+    
+    public string[] RunBaseCollisionDetection()
+    {
+        var colliders = Room.GetColliders();
+        var collidedWith = new HashSet<string>();
+
+        foreach (var collider in colliders)
+        {
+            if (CheckCollision(collider) && CanCollideWithType(collider) && collider.Active && (!collider.IsInvisible || CanOverrideInvisibleDetection()))
+            {
+                collidedWith.Add(collider.Id);
+                collider.SendCollisionEvent(this);
+            }
+        }
+
+        return [.. collidedWith];
+    }
 }

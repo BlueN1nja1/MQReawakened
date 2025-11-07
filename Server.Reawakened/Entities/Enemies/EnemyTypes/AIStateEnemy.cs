@@ -5,6 +5,8 @@ using Server.Reawakened.Entities.Enemies.Extensions;
 using Server.Reawakened.Entities.Enemies.Models;
 using Server.Reawakened.Players;
 using Server.Reawakened.Rooms.Extensions;
+using Server.Reawakened.Rooms.Models.Planes;
+using UnityEngine;
 
 namespace Server.Reawakened.Entities.Enemies.EnemyTypes;
 
@@ -22,21 +24,21 @@ public class AIStateEnemy(EnemyData data) : BaseEnemy(data)
         else
             stateMachine.SetAIStateEnemy(this);
 
+        base.Initialize();
+        
         Room.SendSyncEvent(
             GetBlankEnemyInit(
-                Position.x, Position.y, Position.z,
-                Position.x, Position.y
+                Position.X, Position.Y, Position.Z,
+                Position.X, Position.Y
             )
         );
-
-        base.Initialize();
     }
 
     public override void SendAiData(Player player) =>
         Room.SendSyncEvent(
             GetBlankEnemyInit(
-                Position.x, Position.y, Position.z,
-                Position.x, Position.y
+                Position.X, Position.Y, Position.Z,
+                Position.X, Position.Y
             )
         );
 

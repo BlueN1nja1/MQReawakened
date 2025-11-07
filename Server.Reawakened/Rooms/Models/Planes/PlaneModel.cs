@@ -32,7 +32,7 @@ public class PlaneModel(string planeName)
             obj.ObjectInfo.Rectangle = rect;
     }
 
-    public void LoadGameObjectXml(XmlNode gameObjectNode, Room room)
+    public void LoadGameObjectXml(XmlNode gameObjectNode)
     {
         var attributes = gameObjectNode.Attributes!;
 
@@ -49,29 +49,22 @@ public class PlaneModel(string planeName)
             Position = new Vector3Model(
                 attributes.GetSingleValue("x"),
                 attributes.GetSingleValue("y"),
-                attributes.GetSingleValue("z"),
-                id,
-                room
+                attributes.GetSingleValue("z")
             ),
             Rotation = new Vector3Model
             (
                 attributes.GetSingleValue("rx"),
                 attributes.GetSingleValue("ry"),
-                attributes.GetSingleValue("rz"),
-                string.Empty,
-                null
+                attributes.GetSingleValue("rz")
             ),
             Scale = new Vector3Model
             (
                 attributes.GetSingleValue("sx"),
                 attributes.GetSingleValue("sy"),
-                attributes.GetSingleValue("sz"),
-                string.Empty,
-                null
+                attributes.GetSingleValue("sz")
             ),
             ParentPlane = PlaneName,
             Rectangle = new RectModel(-1000.0f, -1000.0f, 0f, 0f)
-
         };
 
         foreach (XmlNode componentNode in gameObjectNode.ChildNodes)

@@ -23,11 +23,11 @@ public class AIBehaviorAggro(BehaviorEnemy enemy, AggroProperties fallback) : AI
 
     public override StateType GetStateType() => StateType.Aggro;
 
-    public override void NextState() =>
+    public override void NextState() => 
         enemy.ChangeBehavior(
             enemy.Global.AwareBehavior,
-            enemy.Global.UnawareBehavior == StateType.ComeBack ? enemy.Position.x : _aiData.Sync_TargetPosX,
-            enemy.Global.UnawareBehavior == StateType.ComeBack ? enemy.Position.y : _aiData.Sync_TargetPosY,
-            _aiData.Intern_Dir
+            enemy.Global.UnawareBehavior == StateType.ComeBack ? enemy.Position.X : enemy.AiData.Sync_TargetPosX,
+            enemy.Global.UnawareBehavior == StateType.ComeBack ? enemy.Position.Y : enemy.AiData.Sync_TargetPosY,
+            enemy.AiData.Intern_Dir
         );
 }
