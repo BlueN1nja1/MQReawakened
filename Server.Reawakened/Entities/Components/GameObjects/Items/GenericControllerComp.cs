@@ -39,9 +39,8 @@ public class GenericControllerComp : Component<GenericCollectible>
     {
         Collected = true;
 
-        var players = Room.GetPlayers();
-
-        var collectedValue = Value * players.Length;
+        var players = Room.GetNearbyPlayers(player.TempData.Position.ToUnityVector3(), 25);
+        var collectedValue = Value * players.Count;
 
         Room.SentEntityTriggered(Id, player, true, true);
 
@@ -57,7 +56,8 @@ public class GenericControllerComp : Component<GenericCollectible>
                 break;
             default:
                 Logger.LogWarning("Collectible not implemented for {PrefabName}", PrefabName);
-                break;
+                Collected = false;
+                return;
         }
 
         var effectEvent = new FX_SyncEvent(

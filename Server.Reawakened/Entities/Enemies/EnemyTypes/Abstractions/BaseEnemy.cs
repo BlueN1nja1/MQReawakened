@@ -63,6 +63,7 @@ public abstract class BaseEnemy : IDestructible
     public readonly IEnemyController EnemyController;
     public readonly EnemyModel EnemyModel;
     public InterObjStatusComp Status;
+    public WorldStatistics WorldStatistics;
 
     public Vector3Model Position => EnemyController.Position;
 
@@ -84,6 +85,7 @@ public abstract class BaseEnemy : IDestructible
         QuestCatalog = Services.GetRequiredService<QuestCatalog>();
         ItemCatalog = Services.GetRequiredService<ItemCatalog>();
         ServerRConfig = Services.GetRequiredService<ServerRConfig>();
+        WorldStatistics = Services.GetRequiredService<WorldStatistics>();
 
         Logger.LogDebug("Creating enemy {PrefabName} with ID {Id}", PrefabName, Id);
 
@@ -197,7 +199,10 @@ public abstract class BaseEnemy : IDestructible
         var bottomX = offset.x * EnemyController.Scale.X;
         var bottomY = offset.y * EnemyController.Scale.Y;
 
-        var rect = new RectModel(bottomX - width, bottomY, width, height);
+        // Checks if the enemy is a ceiling enemy and adjusts hitbox accordingly
+        var rect = Status.Scale.Y < 0
+            ? new RectModel(bottomX - width/2, bottomY - height, width, height)
+            : new RectModel(bottomX - width/2, bottomY, width, height);
 
         Logger.LogTrace("Created enemy hitbox at {Position} of size {Size}", Position, rect);
 
@@ -220,6 +225,23 @@ public abstract class BaseEnemy : IDestructible
         Room.SendSyncEvent(new AiHealth_SyncEvent(Id.ToString(), Room.Time, Health, damage, resistance, resistedDamage, player == null ? string.Empty : player.CharacterName, false, true));
 
         NotifyDamaged(player);
+    }
+
+    public int EnemyDamagePlayer(Player player)
+    {
+        var element = ItemEffectType.BluntDamage;
+
+        if (EnemyController.PrefabName.Contains("_Boss"))
+            element = ItemEffectType.LightningDamage;
+        else if (EnemyController.PrefabName.Contains("Swamp"))
+            element = ItemEffectType.EarthDamage;
+        else if (EnemyController.PrefabName.Contains("Invis"))
+            element = ItemEffectType.AirDamage;
+        else if (EnemyController.PrefabName.Contains("Lava"))
+            element = ItemEffectType.FireDamage;
+
+        return WorldStatistics.GetValue(ItemEffectType.AbilityPower, WorldStatisticsGroup.Enemy, Level) -
+                 player.Character.CalculateDefense(element, ItemCatalog);
     }
 
     public virtual void PetDamage(Player player)
@@ -289,7 +311,7 @@ public abstract class BaseEnemy : IDestructible
 
         if (player != null)
         {
-            player.AddReputation(xpAward > 0 ? xpAward : 1, ServerRConfig);
+            player.AddReputation(xpAward > 0 ? xpAward : 1, ServerRConfig, ItemCatalog);
             
             if (EnemyModel.EnemyLootTable != null)
             {
@@ -321,7 +343,7 @@ public abstract class BaseEnemy : IDestructible
         }
     }
 
-    public abstract void SendAiData(Player player);
+    public abstract void SendAiData(Player player, bool sendAIDo);
 
     public void Destroy(Room room, string id) => room.RemoveEnemy(id);
 
@@ -336,7 +358,7 @@ public abstract class BaseEnemy : IDestructible
     }
 
     public void FireProjectile(Vector3Model position, Vector2 speed, bool isGrenade) =>
-        Room.AddRangedProjectile(Id, position, speed, 3, GetDamage(), EnemyController.EnemyEffectType, isGrenade);
+        Room.AddRangedProjectile(Id, position, speed, 3, GetDamage(), EnemyController.EnemyEffectType, isGrenade, PrefabName);
 
     public int GetDamage() =>
         GameFlow.StatisticData.GetValue(

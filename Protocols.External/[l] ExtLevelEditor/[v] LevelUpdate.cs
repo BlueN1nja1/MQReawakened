@@ -13,12 +13,16 @@ using Server.Reawakened.Players;
 using Server.Reawakened.Players.Extensions;
 using Server.Reawakened.Players.Helpers;
 using Server.Reawakened.Rooms;
+using Server.Reawakened.Rooms.Extensions;
 using Server.Reawakened.Rooms.Models.Entities;
 using Server.Reawakened.Rooms.Models.Timers;
 using Server.Reawakened.XMLs.Bundles;
 using Server.Reawakened.XMLs.Bundles.Base;
 using Server.Reawakened.XMLs.Bundles.Internal;
 using Server.Reawakened.XMLs.Data.Achievements;
+using Web.Apps.Leaderboards.Data;
+using Web.Apps.Leaderboards.Database.Scores;
+using Web.Apps.Leaderboards.Enums;
 
 namespace Protocols.External._l__ExtLevelEditor;
 
@@ -34,6 +38,8 @@ public class RoomUpdate : ExternalProtocol
     public ItemCatalog ItemCatalog { get; set; }
     public ILogger<RoomUpdate> Logger { get; set; }
     public TimerThread TimerThread { get; set; }
+    public InternalLeaderboards Leaderboards { get; set; }
+    public TopScoresHandler TopScoresHandler { get; set; }
 
     public override void Run(string[] message)
     {
@@ -45,7 +51,7 @@ public class RoomUpdate : ExternalProtocol
             entityComponent.SendDelayedData(Player);
 
         foreach (var enemy in Player.Room.GetEnemies())
-            enemy.SendAiData(Player);
+            enemy.SendAiData(Player, Player.Room.GetPlayers().Length > 1);
 
         Player.TempData.CurrentArena = null;
 
@@ -62,6 +68,11 @@ public class RoomUpdate : ExternalProtocol
                 SendXt("dt");
 
             MQRSlashCommands.DisplayHelp(Player);
+
+            Player.UpdateTribeProgression();
+
+			UpdateLeaderboards();
+
             Player.TempData.FirstLogin = false;
         }
         else
@@ -76,16 +87,6 @@ public class RoomUpdate : ExternalProtocol
         if (Player.Character.Pets.TryGetValue(Player.GetEquippedPetId(ServerRConfig), out var pet) &&
             pet != null && pet.IsEquipped && PetAbilities.PetAbilityData.TryGetValue(int.Parse(pet.PetId), out var petAbility))
             Player.EquipPet(petAbility, WorldStatistics, ServerRConfig, ItemCatalog);
-
-        TimerThread.RunDelayed(DisableInvincibility, new PlayerTimer { Player = Player }, TimeSpan.FromSeconds(3));
-    }
-
-    private void DisableInvincibility(ITimerData data)
-    {
-        if (data is not PlayerTimer room)
-            return;
-
-        room.Player.TempData.Invincible = false;
     }
 
     private string GetGameObjectStore(Room room)
@@ -163,5 +164,43 @@ public class RoomUpdate : ExternalProtocol
                 sb.Append(setting);
 
         return sb.ToString();
+    }
+	
+    private void UpdateLeaderboards()
+    {
+        foreach (var score in Player.Character.BestMinigameTimes)
+        {
+            var gameId = Leaderboards.Games.FirstOrDefault(x => x.name == score.Key).id;
+
+            var topScores = TopScoresHandler.GetScoresFromId(gameId);
+
+            if (topScores == null)
+            {
+                var topScore = TopScoresHandler.Create(gameId, []);
+                topScores = TopScoresHandler.GetScoresFromData(topScore);
+            }
+
+            var characterScore = topScores.Scores
+                .FirstOrDefault(x => x.CharacterId == Player.Character.Id);
+
+            if (characterScore != null)
+                continue;
+
+            var scoreTime = DateTime.Now.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'sszzz");
+            
+            var leaderboardScore = score.Key == "LV_CRS_Minigame_MonkeyBlast" ? score.Value : score.Value * 100;
+
+            var newScore = new TopScore
+            (
+                (int)leaderboardScore,
+                0,
+                scoreTime,
+                Player.Character.Id
+            );
+
+            topScores.Scores.Add(newScore);
+
+            TopScoresHandler.Update(topScores.Write);
+        }
     }
 }

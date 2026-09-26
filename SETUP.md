@@ -48,9 +48,9 @@ If you’re ready to swing into Ook and host your own server emulator, this guid
 
 ### External Downloads
 
-- **2014 Client (Required)**: Any client archive that contains the required 2014 version DLLs (see [here](https://archive.org/download/InstallMonkeyQuest/Monkey%20Quest.zip))
-- **Override Client (Optional)**: Any alternative client archive for the version actually played on (see [here](https://drive.google.com/drive/folders/1AuNMaNqbszUzWBgT3d_xolSuH_IINJf))
-- **Caches**: Any/all caches you have from the original game, i.e. to view the community archives - look for `UniqueBundles.7z` [here](https://drive.google.com/drive/folders/17ic6S2brJNI9HlFqnue38zFJAv5nqxIU)
+- **2014 Client (Required)**: Any client archive that contains the required 2014 version DLLs (see [here](https://drive.google.com/file/d/1D1cb3CXCG7t-lf5YaJw0fWziVxZS0pFg/view?usp=drive_link))
+- **Override Client (Optional)**: Any alternative client archive for the version actually played on (see [here](https://drive.google.com/drive/folders/17twM6SsVxRLgd6ZgL7UvVNO8S0ckHX7a))
+- **Caches**: Any/all caches you have from the original game, i.e. to view the community archives - look for `UniqueBundles.7z` [here](https://drive.google.com/file/d/1jwM79M5JguVPqCvkvocPtEmE3ArieT3Y/view)
 
 ### File Placement
 
@@ -234,5 +234,11 @@ These JSONs are auto‑created with sensible defaults if missing. You can safely
   - You're likely using an Intel IGPU. There is no fix for this.
 - Game stops loading after playing for a while
   - Clear the cache files in LocalLow
+- File extraction and/or asset bundle transversal taking a long time
+  - Generally this should take ~30m, but if you are mounting folders between file systems (i.e. using WSL and pointing to a folder on your Windows filesystem) this can take 10x-30x longer. Please make sure, if you're using WSL, the folder is pointed to your Linux distro (i.e. Ubuntu).
+
+## Asset Loader
+
+If you want to add custom content to the game you can try following this guide [Asset Loader Guide](ASSETLOADER.md)
 
 ## Happy hosting — and see you in Ook.

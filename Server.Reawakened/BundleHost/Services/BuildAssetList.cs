@@ -33,28 +33,31 @@ public class BuildAssetList(ILogger<BuildAssetList> logger, EventSink sink, Asse
 
     public void Load()
     {
-        console.AddCommand(
-            "refreshCacheDir",
-            "Force generates asset dictionary from default caches directory.",
-            NetworkType.Server | NetworkType.Client,
-            _ => GenerateDefaultAssetList(true)
-        );
+        if (!rwConfig.UseCustomAssetLoader)
+        {
+            console.AddCommand(
+                "refreshCacheDir",
+                "Force generates asset dictionary from default caches directory.",
+                NetworkType.Server | NetworkType.Client,
+                _ => GenerateDefaultAssetList(true)
+            );
 
-        console.AddCommand(
-            "changeCacheDir",
-            "Change the default cache directory and regenerate dictionary.",
-            NetworkType.Server | NetworkType.Client,
-            _ =>
-            {
-                rwConfig.CacheInfoFile = GetInfoFile.TryGetInfoFile("Original", string.Empty, logger);
-                GenerateDefaultAssetList(true);
-            }
-        );
+            console.AddCommand(
+                "changeCacheDir",
+                "Change the default cache directory and regenerate dictionary.",
+                NetworkType.Server | NetworkType.Client,
+                _ =>
+                {
+                    rwConfig.CacheInfoFile = GetInfoFile.TryGetInfoFile("Original", string.Empty, logger, rwConfig);
+                    GenerateDefaultAssetList(true);
+                }
+            );
+        }
     }
 
     public void LoadAssets()
     {
-        rwConfig.CacheInfoFile = GetInfoFile.TryGetInfoFile("Original", rwConfig.CacheInfoFile, logger);
+        rwConfig.CacheInfoFile = GetInfoFile.TryGetInfoFile("Original", rwConfig.CacheInfoFile, logger, rwConfig);
 
         if (!string.IsNullOrEmpty(rwConfig.WebPlayerInfoFile))
             rwConfig.WebPlayerInfoFile = rwConfig.GetWebPlayerInfoFile(rConfig, logger);
@@ -75,7 +78,7 @@ public class BuildAssetList(ILogger<BuildAssetList> logger, EventSink sink, Asse
 
         var assets = !dictExists || forceGenerate
             ? GetAssetsFromCache(Path.GetDirectoryName(rwConfig.CacheInfoFile))
-            : GetAssetsFromDictionary(File.ReadAllText(AssetDictLocation));
+            : GetAssetsFromDictionary(File.ReadAllText(AssetDictLocation), sRConfig);
 
         InternalAssets = assets.GetClosestBundles(sRConfig);
 
@@ -274,11 +277,7 @@ public class BuildAssetList(ILogger<BuildAssetList> logger, EventSink sink, Asse
         {
             asset.Name = textObj;
 
-            // Adding a game version check of vMinigames2012 or deleting this
-            // allows early 2012 to load could be a missing cache issue
-            // this requires the 'refreshCacheDir' command to be run each time
-            // you want to go back to other versions bc NavMesh files will not be present
-            if (asset.Name.StartsWith("NavMesh") && sRConfig.GameVersion >= GameVersion.vMinigames2012)
+            if (asset.Name.StartsWith("NavMesh"))
                 asset.Type = AssetInfo.TypeAsset.NavMesh;
             else
             {
@@ -354,7 +353,7 @@ public class BuildAssetList(ILogger<BuildAssetList> logger, EventSink sink, Asse
         File.WriteAllText(saveDir, document.WriteToString());
     }
 
-    public static IEnumerable<InternalAssetInfo> GetAssetsFromDictionary(string xml)
+    public static IEnumerable<InternalAssetInfo> GetAssetsFromDictionary(string xml, ServerRConfig rConfig)
     {
         var configuration = new List<InternalAssetInfo>();
 
@@ -369,7 +368,12 @@ public class BuildAssetList(ILogger<BuildAssetList> logger, EventSink sink, Asse
             if (node is not XmlElement assetElement)
                 continue;
 
-            configuration.Add(assetElement.XmlToAsset());
+            var asset = assetElement.XmlToAsset();
+
+            if (rConfig.GameVersion <= GameVersion.vPets2012 && asset.Type == AssetInfo.TypeAsset.NavMesh)
+                continue;
+            
+            configuration.Add(asset);
         }
 
         return configuration;

@@ -373,6 +373,15 @@ public class Room : Timer
             return _players.TryGetValue(id, out var value) ? value : null;
     }
 
+    public bool IsGameObjectOfPet(string id, ServerRConfig serverRConfig)
+    {
+        foreach (var player in _players)
+            if (player.Value.Character.Pets.TryGetValue(player.Value.GetEquippedPetId(serverRConfig), out var pet))
+                if (pet.CoopTriggerableId == id) return true;
+
+        return false;
+    }
+
     public Player[] GetPlayers()
     {
         lock (_roomLock)
@@ -396,7 +405,10 @@ public class Room : Timer
 
         lock (_roomLock)
         {
-            _colliders[collider.Id].Add(collider);
+            if (_colliders.TryGetValue(collider.Id, out var value))
+                value.Add(collider);
+            else
+                _colliders.Add(collider.Id, [collider]);
         }
 
         Logger.LogTrace("Added collider with id {ColliderId} to room {RoomId}", collider.Id, _roomId);
@@ -436,13 +448,12 @@ public class Room : Timer
 
     public static Vector2 GetSpawnCoordinates(BaseComponent spawnLocation)
     {
-        var rect = spawnLocation.Rectangle;
         var pos = spawnLocation.Position;
 
         return new Vector2()
         {
-            x = (rect.X == 0 ? pos.X : rect.X) + spawnLocation.Rectangle.Width / 2 - .5f,
-            y = (rect.Y == 0 ? pos.Y : rect.Y) + spawnLocation.Rectangle.Height / 2 + .25f
+            x = pos.X + spawnLocation.Rectangle.Width / 2 - .5f,
+            y = pos.Y + spawnLocation.Rectangle.Height / 2 + .25f
         };
     }
 
@@ -560,7 +571,7 @@ public class Room : Timer
     }
 
     public void AddRangedProjectile(string ownerId, Vector3Model position, Vector2 speed,
-        float lifeTime, int damage, ItemEffectType effect, bool isGrenade)
+        float lifeTime, int damage, ItemEffectType effect, bool isGrenade, string prefabName = "")
     {
         var projectileId = CreateProjectileId();
 
@@ -574,7 +585,7 @@ public class Room : Timer
 
         this.SendSyncEvent(
             AISyncEventHelper.AILaunchItem(
-                ownerId, Time, position.ToUnityVector3(), speed, lifeTime, projectileId, isGrenade
+                ownerId, Time, position.ToUnityVector3(), speed, lifeTime, projectileId, prefabName, isGrenade, _config.GameVersion
             )
         );
 

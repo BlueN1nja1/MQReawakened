@@ -1,4 +1,6 @@
 ﻿using A2m.Server;
+using ICSharpCode.SharpZipLib.Zip.Compression;
+using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
 using Microsoft.Extensions.Logging;
 using Server.Reawakened.Core.Configs;
 using Server.Reawakened.Core.Enums;
@@ -6,11 +8,13 @@ using Server.Reawakened.Database.Characters;
 using Server.Reawakened.Database.Users;
 using Server.Reawakened.Network.Extensions;
 using Server.Reawakened.Players.Helpers;
+using Server.Reawakened.Players.Models.Character;
 using Server.Reawakened.Rooms.Extensions;
 using Server.Reawakened.Rooms.Services;
 using Server.Reawakened.XMLs.Bundles.Base;
 using Server.Reawakened.XMLs.Bundles.Internal;
 using Server.Reawakened.XMLs.Data.Achievements;
+using System.Text;
 using static A2m.Server.QuestStatus;
 
 namespace Server.Reawakened.Players.Extensions;
@@ -72,7 +76,7 @@ public static class PlayerExtensions
         }
     }
 
-    public static void AddReputation(this Player player, int reputation, ServerRConfig config)
+    public static void AddReputation(this Player player, int reputation, ServerRConfig config, ItemCatalog itemCatalog)
     {
         if (player == null)
             return;
@@ -85,7 +89,7 @@ public static class PlayerExtensions
             var newLevel = player.Character.GlobalLevel + 1;
 
             player.Character.SetLevelXp(newLevel, config);
-            player.SendLevelUp();
+            player.SendLevelUp(config, itemCatalog);
         }
 
         player.Character.Write.Reputation = reputation;
@@ -166,10 +170,10 @@ public static class PlayerExtensions
         player.SendCashUpdate();
     }
 
-    public static void AddPoints(this Player player)
+    public static void AddPoints(this Player player, ServerRConfig rConfig, ItemCatalog itemCatalog)
     {
         player.Character.Write.BadgePoints += 100;
-        player.SendLevelUp();
+        player.SendLevelUp(rConfig, itemCatalog);
     }
 
     public static void SendCashUpdate(this Player player) =>
@@ -180,11 +184,13 @@ public static class PlayerExtensions
         var error = string.Empty;
         var levelName = string.Empty;
         var surroundingLevels = string.Empty;
+        var inGameName = string.Empty;
 
         try
         {
             var levelInfo = worldHandler.GetLevelInfo(player.GetLevelId());
             levelName = levelInfo.Name;
+            inGameName = levelInfo.InGameName;
 
             var sb = new SeparatedStringBuilder('!');
 
@@ -204,7 +210,23 @@ public static class PlayerExtensions
         if (worldHandler.Config.GameVersion >= GameVersion.vMinigames2012)
             player.SendXt("lw", error, levelName, surroundingLevels);
         else
-            player.SendXt("lw", error, levelName, string.Empty, surroundingLevels);
+        {
+            var input = Encoding.UTF8.GetBytes(inGameName.ToString());
+
+            using var ms = new MemoryStream();
+
+            var deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, false);
+
+            using (var zlib = new DeflaterOutputStream(ms, deflater))
+            {
+                zlib.Write(input, 0, input.Length);
+                zlib.Finish();
+            }
+
+            var levelDisplayName = Convert.ToBase64String(ms.ToArray());
+
+            player.SendXt("lw", error, levelName, levelDisplayName, surroundingLevels);
+        }
     }
 
     public static void SetCharacterSelected(this Player player, CharacterModel character)
@@ -238,10 +260,10 @@ public static class PlayerExtensions
     }
 
     public static void LevelUp(this Player player, int level, WorldStatistics worldStatistics,
-    ServerRConfig config, Microsoft.Extensions.Logging.ILogger logger)
+    ServerRConfig config, Microsoft.Extensions.Logging.ILogger logger, ItemCatalog itemCatalog)
     {
         player.Character.SetLevelXp(level, config);
-        player.SendLevelUp();
+        player.SendLevelUp(config, itemCatalog);
 
         if (player.Character.Pets.TryGetValue(player.GetEquippedPetId(config), out var pet))
             pet.GainEnergy(player, player.GetMaxPetEnergy(worldStatistics, config));
@@ -257,16 +279,22 @@ public static class PlayerExtensions
     public static void DiscoverTribe(this Player player, TribeType tribe)
     {
         if (player.Character.HasAddedDiscoveredTribe(tribe))
-        {
-            // Set tribe on 2011-2013
-            if (player.Character.Allegiance == TribeType.Invalid
-                && tribe is TribeType.Shadow
-                or TribeType.Outlaw or TribeType.Bone
-                or TribeType.Wild or TribeType.Grease)
-                player.Character.Write.Allegiance = tribe;
+		{
+			//Unlock badges
+			if (player.Character.TribesProgression.ContainsKey(tribe))
+				player.Character.Write.TribesProgression[tribe].Unlocked = true;
+			else
+				player.Character.Write.TribesProgression[tribe] = new TribeDataModel
+				{
+					BadgePoints = 0,
+					TribeType = tribe,
+					Unlocked = true
+				};
 
+			player.SendXt("cA", player.Character.GenerateTribeData([.. player.Character.TribesProgression.Values]), (int)tribe, 0);
+			
             player.SendXt("cB", (int)tribe);
-        }
+		}
     }
 
     public static void DiscoverAllTribes(this Player player)
@@ -353,6 +381,10 @@ public static class PlayerExtensions
                             if (objective.LevelId > 0 && objective.LevelId == player.Room.LevelInfo.LevelId)
                                 meetsRequirement = true;
 
+                // Prevent objectives from being completed by other gameobjects when both ItemId and GameObjectId are set
+                if (objective.ItemId > 0 && objective.GameObjectId > 0 && objective.ObjectiveType == ObjectiveEnum.AlterandReceiveitem)
+                    meetsRequirement = objective.GameObjectId.ToString() == gameObjectId;
+
                 if (!meetsRequirement && objective.LevelId == player.Character.LevelId && type == ObjectiveEnum.MinigameMedal)
                     meetsRequirement = true;
 
@@ -370,11 +402,11 @@ public static class PlayerExtensions
                 }
                 else if (objective.ObjectiveType is ObjectiveEnum.Deliver)
                 {
-                    var item = itemCatalog.GetItemFromId(objective.ItemId);
+                    /*var item = itemCatalog.GetItemFromId(objective.ItemId);
 
                     objective.CountLeft = player.Character.Inventory.Items.TryGetValue(objective.ItemId, out var itemModel) && item != null
                         ? objective.Total - itemModel.Count
-                        : 0;
+                        : 0;*/
                 }
 
                 if (objective.CountLeft <= 0)
@@ -468,5 +500,11 @@ public static class PlayerExtensions
 
         if (int.TryParse(code, out var result))
             player.SendXt("wm", result);
+    }
+
+    public static void ChangeTribe(this Player player, TribeType tribe)
+    {
+        player.Character.Write.Allegiance = tribe;
+        player.SendXt("cC", (int)tribe, player.Character.Id);
     }
 }

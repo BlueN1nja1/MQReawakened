@@ -52,6 +52,7 @@ public class CharacterDataModel(CharacterDbEntry entry, GameVersion version) : C
     public int BadgePoints => Write.BadgePoints;
     public int AbilityPower => Write.AbilityPower;
     public Dictionary<string, ReportModel> Reports => Write.Reports;
+    public int Tokens => Write.Tokens;
 
     public void SetPlayerData(Player player)
     {
@@ -204,32 +205,39 @@ public class CharacterDataModel(CharacterDbEntry entry, GameVersion version) : C
         var itemList = new List<ItemDescription>();
 
         var defenseType = ItemEffectType.Defence;
+        var tribe = TribeType.Unknown;
         switch (effect)
         {
             case ItemEffectType.FireDamage:
                 defenseType = ItemEffectType.ResistFire;
+                tribe = TribeType.Outlaw;
                 break;
             case ItemEffectType.EarthDamage:
                 defenseType = ItemEffectType.ResistEarth;
+                tribe = TribeType.Bone;
                 break;
             case ItemEffectType.AirDamage:
                 defenseType = ItemEffectType.ResistAir;
+                tribe = TribeType.Shadow;
                 break;
             case ItemEffectType.IceDamage:
                 defenseType = ItemEffectType.ResistIce;
-                break;
-            case ItemEffectType.LightningDamage:
-                defenseType = ItemEffectType.ResistLightning;
+                tribe = TribeType.Wild;
                 break;
             case ItemEffectType.PoisonDamage:
                 defenseType = ItemEffectType.ResistEarth;
+                tribe = TribeType.Bone;
                 break;
         }
+
+        var progression = TribesProgression.TryGetValue(tribe, out var badgeType)
+        ? badgeType.BadgePoints
+        : 0;
 
         foreach (var item in Equipment.EquippedItems)
             itemList.Add(itemCatalog.GetItemFromId(item.Value));
 
-        defense += statManager.ComputeEquimentBoost(defenseType, itemList);
+        defense += statManager.ComputeEquimentBoost(defenseType, itemList) + GameFlow.StatisticData.GetValue(effect, WorldStatisticsGroup.Badge, progression / 5);
 
         return defense;
     }
@@ -237,36 +245,53 @@ public class CharacterDataModel(CharacterDbEntry entry, GameVersion version) : C
     public int CalculateDamage(ItemDescription usedItem, ItemCatalog itemCatalog)
     {
         var statManager = new CharacterStatsManager(CharacterName);
-        var damage = GameFlow.StatisticData.GetValue(ItemEffectType.AbilityPower, WorldStatisticsGroup.Player, _player.Character.GlobalLevel);
         var itemList = new List<ItemDescription> { usedItem };
 
-        var effect = ItemEffectType.BluntDamage;
-        switch (usedItem.Elemental)
+        // For blunt damage
+        var effect = ItemEffectType.Unknown;
+        var tribe = TribeType.Unknown;
+
+        if (usedItem != null)
         {
-            case Elemental.Fire:
-                effect = ItemEffectType.FireDamage;
-                break;
-            case Elemental.Earth:
-                effect = ItemEffectType.EarthDamage;
-                break;
-            case Elemental.Air:
-                effect = ItemEffectType.AirDamage;
-                break;
-            case Elemental.Ice:
-                effect = ItemEffectType.IceDamage;
-                break;
-            case Elemental.Lightning:
-                effect = ItemEffectType.LightningDamage;
-                break;
-            case Elemental.Poison:
-                effect = ItemEffectType.EarthDamage;
-                break;
+            switch (usedItem.Elemental)
+            {
+                case Elemental.Fire:
+                    effect = ItemEffectType.FireDamage;
+                    tribe = TribeType.Outlaw;
+                    break;
+                case Elemental.Earth:
+                    effect = ItemEffectType.EarthDamage;
+                    tribe = TribeType.Bone;
+                    break;
+                case Elemental.Air:
+                    effect = ItemEffectType.AirDamage;
+                    tribe = TribeType.Shadow;
+                    break;
+                case Elemental.Ice:
+                    effect = ItemEffectType.IceDamage;
+                    tribe = TribeType.Wild;
+                    break;
+                case Elemental.Poison:
+                    effect = ItemEffectType.EarthDamage;
+                    tribe = TribeType.Bone;
+                    break;
+            }
         }
+
+        var progression = TribesProgression.TryGetValue(tribe, out var badgeType)
+        ? badgeType.BadgePoints
+        : 0;
 
         foreach (var item in Equipment.EquippedItems)
             itemList.Add(itemCatalog.GetItemFromId(item.Value));
 
-        damage += statManager.ComputeEquimentBoost(effect, itemList);
+        var damage = statManager.ComputeEquimentBoost(ItemEffectType.BluntDamage, itemList);
+        if (effect != ItemEffectType.Unknown)
+            damage = (int)(damage * ((100 + GameFlow.StatisticData.GetGlobalStat(Globals.ElementalDamageRatio)) / 100));
+
+        damage += GameFlow.StatisticData.GetValue(ItemEffectType.AbilityPower, WorldStatisticsGroup.Player, _player.Character.GlobalLevel);
+
+        damage += GameFlow.StatisticData.GetValue(effect, WorldStatisticsGroup.Badge, progression / 5);
 
         return damage;
     }

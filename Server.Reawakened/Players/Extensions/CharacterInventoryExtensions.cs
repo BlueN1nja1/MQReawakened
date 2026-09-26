@@ -9,7 +9,6 @@ using Server.Reawakened.Network.Extensions;
 using Server.Reawakened.Players.Helpers;
 using Server.Reawakened.Players.Models.Character;
 using Server.Reawakened.Players.Models.Pets;
-using Server.Reawakened.Rooms.Extensions;
 using Server.Reawakened.XMLs.Bundles.Base;
 
 namespace Server.Reawakened.Players.Extensions;
@@ -21,11 +20,14 @@ public static class CharacterInventoryExtensions
     {
         foreach (var effect in usedItem.ItemEffects)
         {
-            player.Room.SendSyncEvent(new StatusEffect_SyncEvent(player.GameObjectId.ToString(), player.Room.Time, (int)effect.Type, effect.Value, effect.Duration, true, usedItem.PrefabName, false));
-
+			var sendFx = true;
             switch (effect.Type)
             {
                 case ItemEffectType.PetRegainEnergy:
+                    // Pet energy/abilities doesn't exist yet
+                    if (serverRConfig.GameVersion <= GameVersion.vMinigames2012)
+                        break;
+                    
                     if (!player.Character.Pets.TryGetValue(player.GetEquippedPetId(serverRConfig), out var pet))
                     {
                         logger.LogWarning("Couldn't find equipped pet for {characterName}", player.CharacterName);
@@ -55,6 +57,9 @@ public static class CharacterInventoryExtensions
                 case ItemEffectType.ResistEarth:
                 case ItemEffectType.ResistIce:
                 case ItemEffectType.ResistLightning:
+					player.Character.StatusEffects.Add(effect);
+                    sendFx = false;
+                    break;
                 case ItemEffectType.WaterBreathing:
                 case ItemEffectType.Detect:
                 case ItemEffectType.Invisibility:
@@ -62,7 +67,23 @@ public static class CharacterInventoryExtensions
                 case ItemEffectType.ExperienceMultiplier:
                     player.Character.StatusEffects.Add(effect);
                     break;
+                case ItemEffectType.ColorTonic:
+                    // ColorTonic effect doesn't exist yet
+                    if (serverRConfig.GameVersion <= GameVersion.vLate2012)
+                        break;
+                    
+                    if (player.Character.StatusEffects.HasEffect(ItemEffectType.ColorTonic))
+                    {
+                        sendFx = false;
 
+                        player.Character.StatusEffects.Remove(ItemEffectType.ColorTonic);
+
+                        player.SendItemEffectToPlayer(effect, string.Empty, sendFx, usedItem.Currency == CurrencyType.NickCash);
+                    }
+
+                    player.Character.StatusEffects.Add(effect);
+                    sendFx = true;
+                    break;
                 case ItemEffectType.Invalid:
                 case ItemEffectType.Unknown:
                 case ItemEffectType.Unknown_61:
@@ -73,7 +94,10 @@ public static class CharacterInventoryExtensions
                     return;
             }
 
-            logger.LogInformation("Applied ItemEffectType of ({effectType}) from item {usedItemName} for _player {playerName}", effect.Type, usedItem.PrefabName, player.CharacterName);
+            player.SendItemEffectToPlayer(effect, usedItem.PrefabName, sendFx, usedItem.Currency == CurrencyType.NickCash);
+
+            logger.LogInformation("Applied ItemEffectType of ({effectType}) from item {usedItemName} for _player {playerName}",
+                effect.Type, usedItem.PrefabName, player.CharacterName);
         }
     }
 
@@ -97,26 +121,22 @@ public static class CharacterInventoryExtensions
 
     public static void AddItem(this Player player, ItemDescription item, int count, ItemCatalog itemCatalog)
     {
-        if (!itemCatalog.CanAddItem(item))
+        if (!itemCatalog.CanAddItem(item) || item == null || player == null || itemCatalog == null)
             return;
 
         var characterData = player.Character;
+        var itemCount = count;
 
         if (!characterData.Inventory.Items.ContainsKey(item.ItemId))
-            characterData.Inventory.Items.Add(item.ItemId, new ItemModel
-            {
-                ItemId = item.ItemId,
-                Count = 0,
-                BindingCount = item.BindingCount,
-                DelayUseExpiry = item.DelayUseExpiry
-            });
+            characterData.Inventory.Items.Add(item.ItemId, new ItemModel(item.ItemId, count, item.BindingCount, item.DelayUseExpiry));
 
-        if (!characterData.TryGetItem(item.ItemId, out var gottenItem))
-            return;
+        else if (characterData.TryGetItem(item.ItemId, out var gottenItem))
+        {
+            gottenItem.Count += count;
+            itemCount = gottenItem.Count;
+        }
 
-        gottenItem.Count += count;
-
-        player.CheckObjective(ObjectiveEnum.Inventorycheck, gottenItem.ItemId.ToString(), item.PrefabName, gottenItem.Count, itemCatalog);
+        player.CheckObjective(ObjectiveEnum.Inventorycheck, item.ItemId.ToString(), item.PrefabName, itemCount, itemCatalog);
     }
 
     public static void AddKit(this CharacterModel characterData, List<ItemDescription> items, int count)
@@ -127,13 +147,7 @@ public static class CharacterInventoryExtensions
                 if (characterData.Inventory.Items.TryGetValue(item.ItemId, out var gottenKit))
                     gottenKit.Count += count;
                 else
-                    characterData.Inventory.Items.Add(item.ItemId, new ItemModel
-                    {
-                        ItemId = item.ItemId,
-                        Count = count,
-                        BindingCount = item.BindingCount,
-                        DelayUseExpiry = item.DelayUseExpiry
-                    });
+                    characterData.Inventory.Items.Add(item.ItemId, new ItemModel(item.ItemId, count, item.BindingCount, item.DelayUseExpiry));
         }
     }
 
@@ -142,12 +156,8 @@ public static class CharacterInventoryExtensions
         var sb = new SeparatedStringBuilder('|');
 
         foreach (var item in inventory.Items)
-        {
-            if (item.Value != null)
+            if (item.Value is not null)
                 sb.Append(item.Value.ToString());
-            else
-                sb.Append(string.Empty);
-        }
 
         return sb.ToString();
     }
@@ -157,11 +167,11 @@ public static class CharacterInventoryExtensions
         player.SendXt(
             "ip",
             player.Character.Inventory.GetItemListString(),
-            fromEquippedUpdate
+            fromEquippedUpdate ? 1 : 0
         );
 
         foreach (var item in player.Character.Inventory.Items)
-            if (item.Value.Count <= 0)
+            if (item.Value != null && item.Value.Count <= 0)
                 player.Character.Inventory.Items.Remove(item.Key);
     }
 
@@ -171,7 +181,7 @@ public static class CharacterInventoryExtensions
 
         player.RemoveItem(itemDescription, 1, itemCatalog, config);
         player.SendXt("hu", player.Character.Hotbar);
-        player.SendUpdatedInventory();
+        player.SendUpdatedInventory(true);
     }
 
     public static void SetHotbarSlot(this Player player, int slotId, ItemModel itemModel, ItemRConfig config)
@@ -205,7 +215,8 @@ public static class CharacterInventoryExtensions
         var petId = player.GetEquippedPetId(serverRConfig);
         var refillCurrentEnergy = false;
 
-        if (petId == "0" || !itemCatalog.GetItemFromId(int.Parse(petId)).IsPet()) return;
+        if (petId == "0" || petId == string.Empty || itemCatalog.GetItemFromId(int.Parse(petId)) == null
+            || !itemCatalog.GetItemFromId(int.Parse(petId)).IsPet()) return;
 
         if (!player.Character.Pets.TryGetValue(petId, out var currentPet))
         {
@@ -228,7 +239,8 @@ public static class CharacterInventoryExtensions
 
         var petId = player.GetEquippedPetId(serverRConfig);
 
-        if (!itemCatalog.GetItemFromId(int.Parse(petId)).IsPet() ||
+        if (petId == "0" || petId == string.Empty || itemCatalog.GetItemFromId(int.Parse(petId)) == null ||
+            !itemCatalog.GetItemFromId(int.Parse(petId)).IsPet() ||
             !player.Character.Pets.TryGetValue(petId, out var currentPet)) return;
 
         else

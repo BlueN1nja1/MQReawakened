@@ -33,6 +33,7 @@ public class ItemCatalog : ItemHandler, ILocalizationXml
     public EditItem EditItem { get; set; }
     public QuestCatalog QuestCatalog { get; set; }
     public ILogger<ItemCatalog> Logger { get; set; }
+    public InternalLevelReward InternalLevelReward { get; set; }
 
     public ItemCatalog() : base(null)
     {
@@ -340,7 +341,10 @@ public class ItemCatalog : ItemHandler, ILocalizationXml
         return outItem;
     }
 
-    public List<ItemDescription> GetItemsFromLevel(int minLevel, int maxLevel, ItemCategory category)
+    public int GetTextIdFromName(string text) => 
+        _itemNameDict.TryGetValue(text, out var value) ? value : 0;
+		
+	public List<ItemDescription> GetItemsFromLevel(int minLevel, int maxLevel, ItemCategory category)
     {
         var itemList = new List<ItemDescription>();
         foreach (var item in Items)

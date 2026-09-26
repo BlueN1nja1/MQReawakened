@@ -11,6 +11,7 @@ using Server.Web.Abstractions;
 using System;
 using System.Threading.Tasks;
 using Module = Server.Base.Core.Abstractions.Module;
+using System.IO;
 
 namespace Init;
 
@@ -28,7 +29,7 @@ public class Program
 
             builder.Configuration
                 .AddEnvironmentVariables()
-                .AddJsonFile("/settings/appsettings.json", optional: true, reloadOnChange: true);
+                .AddJsonFile("/data/appsettings.json", optional: true, reloadOnChange: true);
 
             logger.LogDebug("Getting modules");
             var modules = GetModules(logger);

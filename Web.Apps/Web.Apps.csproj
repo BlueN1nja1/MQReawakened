@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <DebugType>embedded</DebugType>
         <Platforms>AnyCPU;ARM64</Platforms>
@@ -13,6 +13,9 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Reference Include="A2mCore">
+        <HintPath>..\Server.Reawakened\Dependencies\A2mCore.dll</HintPath>
+      </Reference>
       <Reference Include="Assembly-CSharp">
         <HintPath>..\Server.Reawakened\Dependencies\Assembly-CSharp.dll</HintPath>
       </Reference>

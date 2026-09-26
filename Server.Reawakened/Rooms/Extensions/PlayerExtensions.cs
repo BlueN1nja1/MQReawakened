@@ -1,9 +1,13 @@
-﻿using Server.Base.Accounts.Extensions;
+﻿using A2m.Server;
+using Server.Base.Accounts.Extensions;
+using Server.Reawakened.Core.Configs;
+using Server.Reawakened.Core.Enums;
 using Server.Reawakened.Database.Characters;
 using Server.Reawakened.Entities.Colliders;
 using Server.Reawakened.Network.Extensions;
 using Server.Reawakened.Players;
 using Server.Reawakened.Players.Extensions;
+using Server.Reawakened.Players.Models.Character;
 using Server.Reawakened.Players.Models.Protocol;
 using Server.Reawakened.Rooms.Enums;
 using Server.Reawakened.Rooms.Models.Planes;
@@ -86,16 +90,42 @@ public static class PlayerExtensions
         receive.SendXt("ci", send.UserId, info, send.GameObjectId, levelInfo.Name);
     }
 
-    public static void SendLevelUp(this Player player)
+    public static void SendLevelUp(this Player player, ServerRConfig rConfig, ItemCatalog itemCatalog)
     {
         var levelUpData = new LevelUpDataModel
         {
             Level = player.Character.GlobalLevel,
-            IncPowerJewel = player.Character.BadgePoints,
+            IncLife = 100,
+            IncDefense = 2,
+            IncResistance = 20,
+            IncAbilityPower = 20,
+            CurrentLevelCompletion = player.Character.ReputationForCurrentLevel,
+            IncPowerJewel = 1,
+            ItemId = -1,
+            Nc = 125,
+            GameVersion = rConfig.GameVersion
         };
 
+        if (levelUpData.GameVersion <= GameVersion.vEarly2013)
+            if (itemCatalog.InternalLevelReward.LevelRewardData.TryGetValue(levelUpData.Level, out var rewardData))
+            {
+                var item = itemCatalog.GetItemFromPrefabName(rewardData.PrefabName);
+                var amount = rewardData.Amount;
+
+                if (item != null)
+                {
+                    levelUpData.ItemId = item.ItemId;
+            
+                    player.AddItem(item, amount, itemCatalog);
+                }
+            }
+        
         foreach (var currentPlayer in player.Room.GetPlayers())
             currentPlayer.SendXt("ce", levelUpData, player.UserId);
+
+        player.Character.Write.BadgePoints++;
+
+        player.Character.AddHealthOnLevelUp(100);
 
         //Temporary way to earn NC upon level up.
         //(Needed for gameplay improvements as NC is currently unobtainable)
@@ -103,6 +133,17 @@ public static class PlayerExtensions
 
         player.SendSyncEventToPlayer(new Health_SyncEvent(player.GameObjectId.ToString(), player.Room.Time,
             player.Character.MaxLife, player.Character.MaxLife, player.GameObjectId.ToString()));
+			
+        if (player.Character.Allegiance != TribeType.Invalid)
+        {
+            if (player.Character.Write.TribesProgression.TryGetValue(player.Character.Allegiance, out var tribe))
+                if (tribe.BadgePoints < 40)
+                    tribe.BadgePoints++;
+
+            var autoAssign = player.Character.TribesProgression.Count % 5 == 0;
+
+            player.SendXt("cA", player.Character.GenerateTribeData([.. player.Character.TribesProgression.Values]), (int)player.Character.Allegiance, autoAssign ? 1 : 0);
+        }
     }
 
     public static void SendStartPlay(this Player player, CharacterModel character,
@@ -150,4 +191,90 @@ public static class PlayerExtensions
         }
     }
 
+    public static void UpdateTribeProgression(this Player player)
+    {
+        var tribes = new List<TribeDataModel>([.. player.Character.TribesProgression.Values]);
+
+        var hasChanges = false;
+
+        if (player.Character.TribesProgression.Count <= 0 || player.Character.TribesProgression.ContainsKey(TribeType.Crossroads))
+        {
+            tribes =
+            [
+                new()
+                {
+                    BadgePoints = 0,
+                    TribeType = TribeType.Bone,
+                    Unlocked = false
+                },
+                new()
+                {
+                    BadgePoints = 0,
+                    TribeType = TribeType.Outlaw,
+                    Unlocked = false
+                },
+                new()
+                {
+                    BadgePoints = 0,
+                    TribeType = TribeType.Shadow,
+                    Unlocked = false
+                },
+                new()
+                {
+                    BadgePoints = 0,
+                    TribeType = TribeType.Wild,
+                    Unlocked = false
+                }
+            ];
+            hasChanges = true;
+        }
+
+        foreach (var tribeProgress in tribes)
+        {
+            if (tribeProgress.BadgePoints > 40)
+            {
+                tribeProgress.BadgePoints = 40;
+                hasChanges = true;
+            }
+
+            switch (tribeProgress.TribeType)
+            {
+                case TribeType.Bone:
+                    if (player.Character.CompletedQuests.Contains(860) && !tribeProgress.Unlocked)
+                    {
+                        tribeProgress.Unlocked = true;
+                        hasChanges = true;
+                    }
+                    continue;
+                case TribeType.Outlaw:
+                    if (player.Character.CompletedQuests.Contains(857) && !tribeProgress.Unlocked)
+                    {
+                        tribeProgress.Unlocked = true;
+                        hasChanges = true;
+                    }
+                    continue;
+                case TribeType.Shadow:
+                    if (player.Character.CompletedQuests.Contains(854) && !tribeProgress.Unlocked)
+                    {
+                        tribeProgress.Unlocked = true;
+                        hasChanges = true;
+                    }
+                    continue;
+                case TribeType.Wild:
+                    if (player.Character.CompletedQuests.Contains(901) && !tribeProgress.Unlocked)
+                    {
+                        tribeProgress.Unlocked = true;
+                        hasChanges = true;
+                    }
+                    continue;
+            }
+        }
+
+        if (!hasChanges)
+            return;
+
+        player.Character.Write.TribesProgression = tribes.ToDictionary(x => x.TribeType, x => x);
+
+        player.CharacterHandler.Update(player.Character.Write);
+    }
 }

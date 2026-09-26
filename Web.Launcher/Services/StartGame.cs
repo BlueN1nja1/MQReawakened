@@ -9,6 +9,7 @@ using Server.Base.Core.Services;
 using Server.Base.Logging;
 using Server.Base.Network.Enums;
 using Server.Base.Worlds;
+using Server.Reawakened.BundleHost.Configs;
 using Server.Reawakened.BundleHost.Services;
 using Server.Reawakened.Core.Configs;
 using Server.Reawakened.Core.Enums;
@@ -26,7 +27,8 @@ namespace Web.Launcher.Services;
 
 public class StartGame(EventSink sink, ILogger<StartGame> logger, ServerConsole _console,
     World world, PlayerEventSink playerEventSink, RandomKeyGenerator generator, BuildAssetList assetList,
-    LauncherRConfig lRConfig, LauncherRwConfig lWConfig, InternalRwConfig iWConfig, ServerRConfig sConfig) : IService
+    LauncherRConfig lRConfig, LauncherRwConfig lWConfig, InternalRwConfig iWConfig, AssetBundleRwConfig rwConfig,
+    GetAssetDict getAssetDict, ServerRConfig sConfig) : IService
 {
     private string _directory;
     private bool _dirSet = false, _appStart = false;
@@ -72,8 +74,11 @@ public class StartGame(EventSink sink, ILogger<StartGame> logger, ServerConsole 
 
         try
         {
-            lWConfig.GameSettingsFile = SetFileValue.SetIfNotNull(lWConfig.GameSettingsFile, "Get Settings File",
+            if (!EnvironmentExt.IsContainerOrNonInteractive())
+            {
+                lWConfig.GameSettingsFile = SetFileValue.SetIfNotNull(lWConfig.GameSettingsFile, "Get Settings File",
                 "Settings File (*.txt)\0*.txt\0");
+            }
         }
         catch
         {
@@ -85,7 +90,9 @@ public class StartGame(EventSink sink, ILogger<StartGame> logger, ServerConsole 
             if (string.IsNullOrEmpty(lWConfig.GameSettingsFile) || !lWConfig.GameSettingsFile.EndsWith("settings.txt"))
             {
                 logger.LogError("Please enter the absolute file path for your game's 'settings.txt' file.");
-                lWConfig.GameSettingsFile = EnvironmentExt.IsContainerOrNonInteractive() ? "/settings/settings.txt" : ConsoleExt.ReadOrEnv("SETTINGS_FILE_LOCATION", logger);
+                lWConfig.GameSettingsFile = EnvironmentExt.IsContainerOrNonInteractive() ?
+                    Environment.GetEnvironmentVariable("SETTINGS_FILE_LOCATION") ?? "/data/Settings/settings.txt"
+                    : ConsoleExt.ReadOrEnv("SETTINGS_FILE_LOCATION", logger);
                 continue;
             }
 
@@ -128,7 +135,10 @@ public class StartGame(EventSink sink, ILogger<StartGame> logger, ServerConsole 
 
         logger.LogInformation("Set version to: {Version}", Enum.GetName(sConfig.GameVersion));
 
-        assetList.LoadAssets();
+        if (rwConfig.UseCustomAssetLoader)
+            getAssetDict.LoadAssets();
+        else
+            assetList.LoadAssets();
 
         _dirSet = true;
 
@@ -151,7 +161,7 @@ public class StartGame(EventSink sink, ILogger<StartGame> logger, ServerConsole 
 
     public bool ShouldRun()
     {
-        if (EnvironmentExt.IsContainer())
+        if (EnvironmentExt.IsContainer() && !EnvironmentExt.IsConsoleInteractive())
             return false;
 
         if (iWConfig.NetworkType.HasFlag(NetworkType.Client))
@@ -200,7 +210,7 @@ public class StartGame(EventSink sink, ILogger<StartGame> logger, ServerConsole 
 
     public void LaunchGame()
     {
-        if (EnvironmentExt.IsContainer())
+        if (EnvironmentExt.IsContainer() && !EnvironmentExt.IsConsoleInteractive())
         {
             logger.LogInformation("Skipping launcher in container.");
             return;
@@ -217,22 +227,20 @@ public class StartGame(EventSink sink, ILogger<StartGame> logger, ServerConsole 
         logger.LogDebug("Looking For Header In {Directory} Ending In {Header}.", directory,
             lRConfig.HeaderFolderFilter);
 
-        var parentUri = new Uri(directory);
-        var headerFolders = Directory.GetDirectories(directory, string.Empty, SearchOption.AllDirectories)
-            .Select(d => Path.GetDirectoryName(d)?.ToLower())
-            .Where(d => new Uri(new DirectoryInfo(d!).Parent?.FullName!) == parentUri).ToArray();
+        var directoryInfo = new DirectoryInfo(directory);
+        var headerFolder = directoryInfo.GetDirectories()
+            .FirstOrDefault(d => d.Name.EndsWith(lRConfig.HeaderFolderFilter, StringComparison.OrdinalIgnoreCase));
 
-        var headerFolder = headerFolders.FirstOrDefault(a => a?.EndsWith(lRConfig.HeaderFolderFilter) == true);
-        headerFolder = Path.GetFileName(headerFolder?.Remove(headerFolder.Length - lRConfig.HeaderFolderFilter.Length));
+        var header = headerFolder?.Name[..(headerFolder.Name.Length - lRConfig.HeaderFolderFilter.Length)].ToLower();
 
-        logger.LogDebug("Found header: {Header}", headerFolder);
+        logger.LogDebug("Found header: {Header}", header);
 
         logger.LogInformation("Writing Build Config To {Place}", config);
 
         var newDoc = new XDocument();
         var root = new XElement("MQBuildConfig");
 
-        foreach (var item in GetConfigValues(headerFolder, iWConfig.GetHostAddress()))
+        foreach (var item in GetConfigValues(header, iWConfig.GetHostAddress()))
         {
             if (string.IsNullOrEmpty(item.Key) || string.IsNullOrEmpty(item.Value))
                 continue;

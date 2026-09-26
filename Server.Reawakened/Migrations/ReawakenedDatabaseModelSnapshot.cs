@@ -212,6 +212,9 @@ namespace Server.Reawakened.Migrations
                     b.Property<string>("StatusEffects")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Tokens")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("TribesDiscovered")
                         .HasColumnType("TEXT");
 

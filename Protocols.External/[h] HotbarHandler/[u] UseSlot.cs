@@ -40,9 +40,9 @@ public class UseSlot : ExternalProtocol
 
         var position = new Vector3()
         {
-            x = posX,
-            y = posY,
-            z = posZ
+            x = Player.TempData.Position.X,
+            y = Player.TempData.Position.Y,
+            z = Player.TempData.Position.Z
         };
 
         var slotItem = Player.Character.Hotbar.HotbarButtons[hotbarSlotId];
@@ -53,7 +53,7 @@ public class UseSlot : ExternalProtocol
         switch (usedItem.ItemActionType)
         {
             case ItemActionType.Drop:
-                Player.HandleDrop(ItemRConfig, TimerThread, Logger, usedItem, position, direction);
+                Player.HandleDrop(ItemRConfig, TimerThread, Logger, usedItem, position, direction, ServerRConfig);
                 Player.UseItemFromHotBar(usedItem.ItemId, ItemCatalog, ItemRConfig);
                 break;
             case ItemActionType.Grenade:
@@ -67,6 +67,9 @@ public class UseSlot : ExternalProtocol
                 break;
             case ItemActionType.Melee:
                 HandleMeleeWeapon(usedItem, position, direction);
+                break;
+            case ItemActionType.DamageZone:
+                HandleDamageZone(usedItem, position, direction);
                 break;
             case ItemActionType.Relic:
                 HandleRelic(usedItem);
@@ -140,6 +143,7 @@ public class UseSlot : ExternalProtocol
             Player = Player,
             Catalog = ItemCatalog,
             Config = ItemRConfig,
+            ServerRConfig = ServerRConfig
         };
 
         if (isGrenade)
@@ -151,6 +155,19 @@ public class UseSlot : ExternalProtocol
             LaunchProjectile(projectileData);
     }
 
+    private void HandleDamageZone(ItemDescription usedItem, Vector3 position, int direction)
+    {
+
+        var id = Player.Room.CreateProjectileId().ToString();
+
+        // Add weapon stats later
+        var prj = new DamageZoneEntity(id, new Vector3Model(position.x, position.y, position.z), Player, direction, usedItem,
+            Player.Character.CalculateDamage(usedItem, ItemCatalog),
+            usedItem.Elemental);
+
+        Player.Room.AddProjectile(prj);
+    }
+
     public class ProjectileData() : PlayerRoomTimer
     {
         public string ProjectileId;
@@ -160,6 +177,7 @@ public class UseSlot : ExternalProtocol
         public bool IsGrenade;
         public ItemRConfig Config;
         public ItemCatalog Catalog;
+        public ServerRConfig ServerRConfig;
     }
 
     private static void LaunchProjectile(ITimerData data)
@@ -170,7 +188,7 @@ public class UseSlot : ExternalProtocol
         var genericProjectile = new GenericProjectile(projectile.ProjectileId, projectile.Player, projectile.Config.GrenadeLifeTime,
             projectile.Position, projectile.Config, projectile.Direction, projectile.UsedItem,
             projectile.Player.Character.CalculateDamage(projectile.UsedItem, projectile.Catalog),
-            projectile.UsedItem.Elemental, projectile.IsGrenade);
+            projectile.UsedItem.Elemental, projectile.IsGrenade, projectile.ServerRConfig);
 
         projectile.Player.Room.AddProjectile(genericProjectile);
     }
@@ -182,7 +200,7 @@ public class UseSlot : ExternalProtocol
         // Add weapon stats later
         var prj = new MeleeEntity(prjId, new Vector3Model(position.x, position.y, position.z), Player, direction, 0.51f, usedItem,
             Player.Character.CalculateDamage(usedItem, ItemCatalog),
-            usedItem.Elemental, ItemRConfig);
+            usedItem.Elemental, ItemRConfig, ServerRConfig);
 
         Player.Room.AddProjectile(prj);
     }
